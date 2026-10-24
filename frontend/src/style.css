@@ -1,0 +1,268 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap");
+
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #e9edf2;
+  background: #10151c;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  font-weight: 400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(ellipse at 78% 4%, rgb(34 74 81 / 15%), transparent 36rem),
+    #10151c;
+}
+
+button,
+a {
+  font: inherit;
+}
+
+.dashboard {
+  width: min(100% - 64px, 1080px);
+  min-height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #252d37;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: #eef2f5;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.brand-mark {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #365d5b;
+  border-radius: 8px;
+  background: #18302f;
+  color: #68d2ad;
+  font-size: 14px;
+}
+
+.brand-light {
+  color: #7b8792;
+  font-weight: 500;
+}
+
+.environment,
+.eyebrow,
+.service-count,
+footer {
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.environment {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #84919c;
+}
+
+.environment-dot,
+.status-dot {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.environment-dot {
+  background: #69d6ac;
+  box-shadow: 0 0 12px rgb(105 214 172 / 55%);
+}
+
+.intro {
+  padding: 78px 0 62px;
+}
+
+.eyebrow {
+  color: #70cbb1;
+}
+
+.eyebrow span {
+  padding: 0 5px;
+  color: #52616c;
+}
+
+h1 {
+  margin: 17px 0 10px;
+  font-size: clamp(32px, 5vw, 49px);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+}
+
+.subtitle {
+  margin: 0;
+  color: #8e9aa5;
+  font-size: 15px;
+}
+
+.service-section {
+  max-width: 740px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  margin: 0;
+  color: #b5bec7;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.service-count {
+  color: #697681;
+}
+
+.service-card {
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid #2a343e;
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgb(29 39 48 / 80%), rgb(22 30 38 / 80%));
+}
+
+.service-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #344b4b;
+  border-radius: 9px;
+  background: #1e3031;
+  color: #73cdb2;
+  font-family: "DM Mono", monospace;
+  font-size: 11px;
+}
+
+.service-info {
+  flex: 1;
+}
+
+.service-info h3 {
+  margin: 0 0 5px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.service-info p {
+  margin: 0;
+  color: #84919b;
+  font-size: 12px;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.status-online {
+  color: #74d8ad;
+}
+
+.status-online .status-dot {
+  background: #67d2a4;
+  box-shadow: 0 0 9px rgb(103 210 164 / 45%);
+}
+
+.status-checking {
+  color: #c2aa68;
+}
+
+.status-checking .status-dot {
+  background: #c2aa68;
+}
+
+.status-offline {
+  color: #e77d7d;
+}
+
+.status-offline .status-dot {
+  background: #e77d7d;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: auto;
+  padding: 25px 0;
+  border-top: 1px solid #252d37;
+  color: #64717c;
+}
+
+footer b {
+  margin-left: 8px;
+  color: #aeb8c1;
+  font-weight: 400;
+}
+
+@media (max-width: 600px) {
+  .dashboard {
+    width: min(100% - 36px, 1080px);
+  }
+
+  .intro {
+    padding: 62px 0 48px;
+  }
+
+  .environment {
+    font-size: 8px;
+  }
+
+  .service-card {
+    flex-wrap: wrap;
+  }
+
+  .status {
+    width: 100%;
+    padding-left: 58px;
+  }
+
+  footer {
+    gap: 12px;
+    font-size: 8px;
+  }
+}
