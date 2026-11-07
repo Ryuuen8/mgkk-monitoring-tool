@@ -224,6 +224,40 @@ h1 {
   background: #e77d7d;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tab {
+  padding: 8px 16px;
+  border: 1px solid #2a343e;
+  border-radius: 8px;
+  background: #1a222b;
+  color: #8e9aa5;
+  cursor: pointer;
+}
+
+.tab-active {
+  border-color: #365d5b;
+  background: #1e3031;
+  color: #73cdb2;
+}
+
+.error-text {
+  color: #e77d7d;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.checked-at {
+  color: #697681;
+  font-size: 11px;
+  margin-top: 4px;
+  font-family: "DM Mono", monospace;
+}
+
 footer {
   display: flex;
   justify-content: space-between;
