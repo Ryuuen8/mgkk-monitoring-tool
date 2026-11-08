@@ -4,12 +4,18 @@ type LatencyChartProps = {
   points: MetricPoint[];
   height?: number;
   unit?: string;
+  lineColor?: string;
 };
 
 const WIDTH = 820;
 
 /** Lightweight dependency-free SVG line chart for a single metric. */
-function LatencyChart({ points, height = 240, unit = "ms" }: LatencyChartProps) {
+function LatencyChart({
+  points,
+  height = 240,
+  unit = "ms",
+  lineColor = "#68d2ad",
+}: LatencyChartProps) {
   if (points.length === 0) {
     return (
       <div className="chart-empty" style={{ height }}>
@@ -96,7 +102,7 @@ function LatencyChart({ points, height = 240, unit = "ms" }: LatencyChartProps) 
       ))}
 
       <path d={area} fill="url(#latency-fill)" />
-      <path d={line} className="chart-line" />
+      <path d={line} className="chart-line" style={{ stroke: lineColor }} />
     </svg>
   );
 }

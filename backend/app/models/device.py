@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -18,11 +19,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
 from app.models.device_group import device_group_members
-from app.models.enums import DeviceCheckType, DeviceType
+from app.models.enums import CollectorType, DeviceCheckType, DeviceType
 
 if TYPE_CHECKING:
     from app.models.credentials import CredentialProfile
     from app.models.device_group import DeviceGroup
+    from app.models.interface import NetworkInterface
     from app.models.site import Site
 
 
@@ -78,6 +80,18 @@ class Device(TimestampMixin, Base):
         default=DeviceCheckType.PING_ONLY,
         server_default=DeviceCheckType.PING_ONLY.value,
     )
+    collector: Mapped[CollectorType] = mapped_column(
+        Enum(
+            CollectorType,
+            name="collector_type",
+            native_enum=False,
+            length=20,
+            create_constraint=True,
+            values_callable=lambda e: [member.value for member in e],
+        ),
+        default=CollectorType.GENERIC,
+        server_default=CollectorType.GENERIC.value,
+    )
     vendor: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(120))
     os_version: Mapped[str | None] = mapped_column(String(64))
@@ -101,6 +115,18 @@ class Device(TimestampMixin, Base):
     )
     # Cached convenience value; Prometheus remains the source of truth.
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    snmp_system_name: Mapped[str | None] = mapped_column(String(255))
+    snmp_system_description: Mapped[str | None] = mapped_column(Text)
+    uptime_seconds: Mapped[int | None] = mapped_column(BigInteger)
+    cpu_usage_percent: Mapped[float | None] = mapped_column(Float)
+    memory_total_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    memory_used_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    disk_total_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    disk_used_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    temperature_celsius: Mapped[float | None] = mapped_column(Float)
+    voltage_volts: Mapped[float | None] = mapped_column(Float)
+    dhcp_lease_count: Mapped[int | None] = mapped_column(Integer)
+    arp_entry_count: Mapped[int | None] = mapped_column(Integer)
 
     # Free-form extras. Never promote these to Prometheus labels.
     tags: Mapped[dict[str, Any]] = mapped_column(
@@ -120,4 +146,7 @@ class Device(TimestampMixin, Base):
     children: Mapped[list["Device"]] = relationship(back_populates="parent")
     credential_profile: Mapped["CredentialProfile | None"] = relationship(
         back_populates="devices"
+    )
+    interfaces: Mapped[list["NetworkInterface"]] = relationship(
+        back_populates="device", cascade="all, delete-orphan"
     )

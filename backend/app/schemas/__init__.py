@@ -19,6 +19,11 @@ from app.schemas.device_group import (
     DeviceGroupUpdate,
     GroupMembersUpdate,
 )
+from app.schemas.interface import (
+    InterfaceMetrics,
+    LinkSpeedOverrideUpdate,
+    NetworkInterfaceRead,
+)
 from app.schemas.metrics import (
     DeviceMetrics,
     DeviceStatusList,
@@ -45,7 +50,10 @@ __all__ = [
     "DeviceStatusRead",
     "DeviceUpdate",
     "GroupMembersUpdate",
+    "InterfaceMetrics",
+    "LinkSpeedOverrideUpdate",
     "MetricPoint",
+    "NetworkInterfaceRead",
     "Page",
     "SiteCreate",
     "SiteRead",

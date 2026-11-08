@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +13,13 @@ from app.crud import devices as crud
 from app.crud import sites as sites_crud
 from app.db.session import get_session
 from app.models import (
+    CollectorType,
     CredentialProfile,
     CredentialType,
     DeviceCheckType,
     DeviceGroup,
     DeviceType,
+    NetworkInterface,
 )
 from app.schemas import (
     DeviceCreate,
@@ -26,7 +29,10 @@ from app.schemas import (
     DeviceStatusList,
     DeviceStatusRead,
     DeviceUpdate,
+    InterfaceMetrics,
+    LinkSpeedOverrideUpdate,
     MetricPoint,
+    NetworkInterfaceRead,
     Page,
 )
 from app.services import prometheus
@@ -47,6 +53,7 @@ REQUIRED_FIELDS = (
     "mgmt_ip",
     "device_type",
     "check_type",
+    "collector",
     "poll_interval_seconds",
     "is_active",
     "tags",
@@ -117,15 +124,28 @@ async def _check_credential_profile(
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "credential profile not found"
         )
-    expected_type = (
-        CredentialType.SNMP_V2C
-        if check_type is DeviceCheckType.SNMP
-        else CredentialType.ROUTEROS_API
-    )
-    if profile.credential_type != expected_type:
+    is_snmp_profile = profile.credential_type in {
+        CredentialType.SNMP_V2C,
+        CredentialType.SNMP_V3,
+    }
+    if (check_type is DeviceCheckType.SNMP and not is_snmp_profile) or (
+        check_type is DeviceCheckType.ROUTEROS_API
+        and profile.credential_type is not CredentialType.ROUTEROS_API
+    ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "credential profile type does not match the device check type",
+        )
+
+
+def _check_collector(check_type: DeviceCheckType, collector: CollectorType) -> None:
+    if (
+        check_type is DeviceCheckType.ROUTEROS_API
+        and collector is not CollectorType.MIKROTIK
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "RouterOS API checks require the MikroTik collector",
         )
 
 
@@ -215,6 +235,127 @@ async def list_device_status(
             )
         )
     return DeviceStatusList(items=items)
+
+
+@router.get(
+    "/{device_id}/interfaces", response_model=list[NetworkInterfaceRead]
+)
+async def list_device_interfaces(
+    device_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> list[NetworkInterfaceRead]:
+    device = await crud.get_device(session, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, DEVICE_NOT_FOUND)
+    rows = await session.scalars(
+        select(NetworkInterface)
+        .where(NetworkInterface.device_id == device_id)
+        .order_by(NetworkInterface.if_index)
+    )
+    return [NetworkInterfaceRead.model_validate(row) for row in rows]
+
+
+@router.patch(
+    "/{device_id}/interfaces/{interface_id}",
+    response_model=NetworkInterfaceRead,
+)
+async def update_interface_link_speed(
+    device_id: int,
+    interface_id: int,
+    payload: LinkSpeedOverrideUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> NetworkInterfaceRead:
+    row = await session.scalar(
+        select(NetworkInterface).where(
+            NetworkInterface.id == interface_id,
+            NetworkInterface.device_id == device_id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "interface not found")
+    row.link_speed_override_mbps = payload.link_speed_override_mbps
+    await session.commit()
+    await session.refresh(row)
+    return NetworkInterfaceRead.model_validate(row)
+
+
+@router.get(
+    "/{device_id}/interfaces/{interface_id}/metrics",
+    response_model=InterfaceMetrics,
+)
+async def get_interface_metrics(
+    device_id: int,
+    interface_id: int,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    range_hours: int = Query(default=24, ge=24, le=720),
+    step_seconds: int = Query(default=300, ge=30, le=3600),
+) -> InterfaceMetrics:
+    if range_hours not in {24, 168, 720}:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "range_hours must be 24, 168, or 720",
+        )
+    row = await session.scalar(
+        select(NetworkInterface).where(
+            NetworkInterface.id == interface_id,
+            NetworkInterface.device_id == device_id,
+        )
+    )
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "interface not found")
+    device = await crud.get_device_detail(session, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, DEVICE_NOT_FOUND)
+    end = datetime.now(UTC)
+    start = end - timedelta(hours=range_hours)
+    selector = (
+        f'device="{_prom_label(device.name)}",'
+        f'interface="{_prom_label(row.name)}",'
+        f'site="{_prom_label(device.site.code)}"'
+    )
+    rate_window = max(device.poll_interval_seconds * 2, 300)
+    queries = {
+        "in_bits_per_second": (
+            f"rate(interface_in_bytes_total{{{selector}}}[{rate_window}s]) * 8"
+        ),
+        "out_bits_per_second": (
+            f"rate(interface_out_bytes_total{{{selector}}}[{rate_window}s]) * 8"
+        ),
+        "in_errors_per_second": (
+            f"rate(interface_in_errors_total{{{selector}}}[{rate_window}s])"
+        ),
+        "out_errors_per_second": (
+            f"rate(interface_out_errors_total{{{selector}}}[{rate_window}s])"
+        ),
+        "in_discards_per_second": (
+            f"rate(interface_in_discards_total{{{selector}}}[{rate_window}s])"
+        ),
+        "out_discards_per_second": (
+            f"rate(interface_out_discards_total{{{selector}}}[{rate_window}s])"
+        ),
+        "in_utilization": f"interface_in_link_utilization_ratio{{{selector}}}",
+        "out_utilization": f"interface_out_link_utilization_ratio{{{selector}}}",
+    }
+    try:
+        result = {
+            key: _matrix_points(
+                await prometheus.query_range(
+                    query, start=start, end=end, step_seconds=step_seconds
+                )
+            )
+            for key, query in queries.items()
+        }
+    except prometheus.PrometheusError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"prometheus query failed: {exc}"
+        ) from exc
+    return InterfaceMetrics(
+        interface_id=row.id,
+        interface_name=row.name,
+        range_seconds=range_hours * 3600,
+        step_seconds=step_seconds,
+        **result,
+    )
 
 
 @router.get("/{device_id}/metrics", response_model=DeviceMetrics)
@@ -313,6 +454,7 @@ async def create_device(
     await _check_credential_profile(
         session, payload.check_type, payload.credential_profile_id
     )
+    _check_collector(payload.check_type, payload.collector)
     if payload.parent_device_id is not None:
         await _check_parent(session, payload.parent_device_id)
     groups = await _resolve_groups(session, payload.group_ids)
@@ -350,6 +492,10 @@ async def update_device(
         session,
         changes.get("check_type", device.check_type),
         changes.get("credential_profile_id", device.credential_profile_id),
+    )
+    _check_collector(
+        changes.get("check_type", device.check_type),
+        changes.get("collector", device.collector),
     )
     groups = await _resolve_groups(session, changes.get("group_ids") or [])
 

@@ -4,9 +4,9 @@
 
 MGKK Monitoring is a small, database-driven network inventory and reachability
 monitor. Operators register devices in the web UI, choose how each device
-should be checked, and review its latest status and latency. A separate worker
-performs the checks and exposes metrics for Prometheus; the API combines
-inventory from PostgreSQL with status and history from Prometheus.
+should be checked, and review status, system data, and interface telemetry. A
+separate worker performs checks and SNMP collection, persists inventory
+snapshots in PostgreSQL, and exposes metrics for Prometheus.
 
 ## Architecture at a glance
 
@@ -25,8 +25,8 @@ flowchart LR
     UI -->|REST /api| API
     API -->|inventory and encrypted profiles| DB
     Worker -->|device list and profiles| DB
-    Worker -->|ICMP / SNMPv2c / HTTPS REST| Targets
-    Worker -->|device_up, latency, packet loss| Prom
+    Worker -->|ICMP / SNMPv2c and v3 / RouterOS REST or binary API| Targets
+    Worker -->|status, interface counters, rates, resources| Prom
     API -->|instant and range queries| Prom
     Prom -->|scrape /metrics| API
     Prom -->|scrape worker /metrics| Worker
@@ -44,39 +44,50 @@ not in the device polling or metrics flow.
    device with a stable inventory name, management IP, optional vendor/model
    metadata, and poll interval. The database row ID is the device identity;
    the IP is an editable address, not a unique identifier.
-2. **Choose a check.** Select Ping only, SNMP v2c, or RouterOS REST API.
-   SNMP and RouterOS checks need a matching credential profile.
+2. **Choose a check and collector.** Select Ping only, SNMP, or RouterOS API,
+   then choose the generic SNMP or MikroTik telemetry collector. RouterOS API
+   checks require the MikroTik collector.
 3. **Protect credentials.** A profile stores an SNMP community or RouterOS
-   username/password. The API encrypts the secret using the configured
-   `CREDENTIAL_ENCRYPTION_KEY`; profile responses never return the secret.
+   username/password. SNMPv3 profiles support SHA/SHA-256 authentication and
+   optional AES-128 privacy. Both passphrases are encrypted using the configured
+   `CREDENTIAL_ENCRYPTION_KEY`; profile responses never return either secret.
 4. **Discover poll work.** Every worker tick, the poller reads active devices
    and their check profiles from PostgreSQL. Each device is checked when its
    own poll interval has elapsed.
 5. **Check the device.**
    - **Ping:** `icmplib` sends three ICMP echo requests, each with a 2-second
      timeout. The worker container is granted `NET_RAW`.
-   - **SNMP v2c:** the worker reads the standard `sysUpTime` OID over UDP.
-   - **RouterOS REST:** the worker requests
-     `/rest/system/resource` over HTTPS using HTTP Basic authentication and a
-     5-second timeout. TLS verification is enabled by default per profile.
-6. **Publish results.** The worker exposes `device_up`,
-   `ping_latency_seconds`, and `ping_packet_loss_ratio`. Despite the historic
-   `ping_` metric names, latency and up/down status also represent SNMP and
-   RouterOS check results. Packet-loss data is meaningful only for ICMP checks.
-   On success, the worker also updates the device's `last_seen_at` in
-   PostgreSQL.
+   - **SNMP:** both collectors use the same system identity, uptime, and IF-MIB
+     interface path. Generic CPU/memory use HOST-RESOURCES-MIB when available;
+     MikroTik adds vendor resource and health metrics.
+   - **RouterOS API:** the MikroTik collector uses REST on RouterOS v7.1+ and
+     the binary API-SSL service on v6. Port 8728 can be explicitly selected for
+     an unencrypted API connection. It collects system resources, interfaces,
+     and aggregate DHCP/ARP/wireless data. TLS verification is enabled by
+     default.
+6. **Publish results.** Device checks expose `device_up`, `ping_latency_seconds`,
+   and `ping_packet_loss_ratio`. Interface octet/error/discard metrics are
+   Prometheus counters: each poll adds the positive delta from the saved
+   SNMP/API counter, accounting for a counter reset or wrap.
+   Prometheus `rate()` is used for traffic and error charts. Interface metrics
+   have only `device`, `interface`, and `site` labels. Link utilization is
+   computed from the observed traffic delta and discovered or operator-overridden
+   `ifHighSpeed`. The worker also updates last-seen and system/interface
+   snapshots in PostgreSQL.
 7. **Display status and history.** Prometheus scrapes the API and worker.
-   The UI gets the inventory from FastAPI; the API queries Prometheus for the
-   latest status and range data used by the device list and detail chart.
+   The UI gets inventory from FastAPI and the latest per-device check status
+   from `/api/devices/status`; the API queries Prometheus for status and
+   historical latency, packet-loss, and interface telemetry. The device detail
+   view also shows discovered system/interface data from PostgreSQL snapshots.
 
 ## Main components
 
 | Component | Responsibility |
 |---|---|
-| React + TypeScript | Device inventory forms/list/detail, check selection, and credential profile management |
-| FastAPI | Validates requests, serves inventory/profile CRUD, and queries Prometheus |
-| PostgreSQL | Stores sites, devices, groups, poll settings, and encrypted credential profiles |
-| Poller worker | Reads active targets, runs checks on schedule, and exports device metrics |
+| React + TypeScript | Inventory, encrypted profile management, interface list, traffic/error/discard charts, and bandwidth ranges |
+| FastAPI | Validates inventory/profile/interface requests and queries Prometheus |
+| PostgreSQL | Stores inventory, encrypted credentials, system snapshots, interface identities, speed overrides, and last counter samples |
+| Poller worker | Runs checks, polls SNMP system/interfaces and available vendor or standard resources, and exports metrics |
 | Prometheus | Scrapes API/worker metrics and retains time-series data for status/history |
 | Grafana | Included in Compose for dashboards using Prometheus as a data source |
 | Redis | Included in Compose; not currently used by the device-monitoring flow |
@@ -94,36 +105,49 @@ UI <--status/chart response-- FastAPI <--Prometheus query-- Prometheus
 Lab device <--check-- Poller worker ------------------------+
 ```
 
-The worker exports `device_up` (1/0), `ping_latency_seconds` (seconds), and
-`ping_packet_loss_ratio` (0-1). The API converts latency to milliseconds for
-the UI. Device names and site codes are used as metric labels; IP addresses
-and tags are not used as labels.
+The worker exports `device_up` (1/0), `ping_latency_seconds` (seconds),
+`ping_packet_loss_ratio` (0-1), interface byte/error/discard counters,
+link-utilization gauges, and CPU/memory gauges for devices exposing supported
+MIB data. The API applies
+`rate()` to true monotonic counters for interface history. Interface series
+use only `device`, `interface`, and `site` labels; IP addresses and arbitrary
+tags are never labels.
 
 ## MikroTik lab walkthrough
 
 For a demo, prepare a reachable CHR/router and configure it before adding it to
 the UI:
 
-1. Configure SNMP and/or enable `www-ssl` on RouterOS.
+1. Configure SNMP and/or enable the RouterOS API. REST requires v7.1+ and
+   `www-ssl`; automatic v6 fallback uses API-SSL on 8729.
 2. Create a dedicated read-only SNMP community or RouterOS monitoring user.
    Restrict service access to the poller host/network where practical.
 3. Set `CREDENTIAL_ENCRYPTION_KEY` in `.env`, then start the app and apply the
    Alembic migration.
-4. Open **Credentials** in the UI and add an SNMP v2c or RouterOS API profile.
+4. Open **Credentials** in the UI and add an SNMP v2c/v3 or RouterOS API profile.
    For a self-signed lab certificate, TLS verification can be disabled for
    that profile; use a trusted certificate outside a lab.
-5. Open **Devices**, add a router with vendor `mikrotik`, select the matching
-   check type and profile, and save it.
-6. Open the device details to show check type, latest status, latency, and
-   history after Prometheus has collected samples.
+5. Open **Devices**, add a router, select the MikroTik collector and matching
+   check type/profile, and save it.
+6. Open device details to show system name/description, uptime, CPU/memory when
+   exposed by the vendor or standard MIB, discovered interfaces, traffic/errors/discards, current and
+   peak throughput, and 24-hour/7-day/30-day bandwidth history after Prometheus
+   has collected samples. Set a link-speed override for virtual/tunnel
+   interfaces when `ifHighSpeed` is missing or inaccurate.
+7. Open Grafana's provisioned **MGKK Network Telemetry** or **MikroTik Router
+   Health** dashboard to compare interface traffic, utilization, and resources.
 
-For ICMP, the worker has `NET_RAW`. SNMP and RouterOS checks use UDP and HTTPS,
-respectively, so the poller container must also have IP routing and firewall
-access to each lab device and service port. Docker Desktop on Windows may
+For ICMP, the worker has `NET_RAW`. SNMP, RouterOS REST, and binary API use
+UDP, HTTPS, and TCP respectively, so the poller container must also have IP
+routing and firewall access to each lab device and service port. Docker Desktop on Windows may
 require additional host/VM networking configuration; `docker compose up` alone
 does not create a CHR or bridge a separate lab subnet.
 
 ## Demo talk track
+
+The frontend **Guide** tab walks through Overview, Devices, device setup,
+device details, credential profiles, and status troubleshooting. Use it as an
+in-app orientation before the following demo:
 
 1. Start on **Devices** and explain inventory identity versus the mutable
    management IP.
@@ -139,13 +163,21 @@ does not create a CHR or bridge a separate lab subnet.
 
 ## Current scope and caveats
 
-- SNMP currently performs an availability check by reading `sysUpTime`; full
-  interface/system inventory collection is not implemented.
-- RouterOS checks currently verify reachability and credentials by requesting
-  `system/resource`; RouterOS values are not yet saved as inventory fields.
+- SNMP system and interface collection is implemented. MikroTik CPU/memory uses
+  its vendor MIB; generic CPU/memory uses HOST-RESOURCES-MIB when available.
+  Devices that do not implement these resource tables still provide system and
+  interface telemetry, but their CPU/memory values remain unavailable.
+- RouterOS REST is attempted first; failed REST access falls back to the
+  RouterOS binary API-SSL on 8729. Port 8728 is available by explicit
+  profile configuration. Wireless data is aggregated by interface;
+  DHCP and ARP expose counts only, never client identity labels.
+- Bandwidth history depends on Prometheus retention and is not backfilled before
+  the poller first observes the interface.
 - The Compose stack does not provision MikroTik CHR instances or SNMP test
   devices.
 - Prometheus is the time-series source for device status and charts; the API's
   `/metrics` endpoint also reports API request metrics.
+- Compose keeps Prometheus samples for 45 days so the 30-day bandwidth range is
+  available with a retention buffer.
 - The API does not currently authenticate UI users. Keep it on a trusted
   network and use read-only device credentials.

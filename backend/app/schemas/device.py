@@ -10,7 +10,7 @@ from pydantic import (
     field_validator,
 )
 
-from app.models.enums import DeviceCheckType, DeviceType
+from app.models.enums import CollectorType, DeviceCheckType, DeviceType
 from app.schemas.common import ORMModel, Timestamps
 from app.schemas.credentials import CredentialProfileRef
 from app.schemas.device_group import DeviceGroupRef
@@ -40,6 +40,7 @@ class DeviceBase(BaseModel):
     mac: str | None = None
     device_type: DeviceType = DeviceType.OTHER
     check_type: DeviceCheckType = DeviceCheckType.PING_ONLY
+    collector: CollectorType = CollectorType.GENERIC
     credential_profile_id: int | None = None
     vendor: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=120)
@@ -82,6 +83,7 @@ class DeviceUpdate(BaseModel):
     mac: str | None = None
     device_type: DeviceType | None = None
     check_type: DeviceCheckType | None = None
+    collector: CollectorType | None = None
     credential_profile_id: int | None = None
     vendor: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=120)
@@ -114,6 +116,18 @@ class DeviceRead(DeviceBase, Timestamps):
 
     id: int
     last_seen_at: datetime | None = None
+    snmp_system_name: str | None = None
+    snmp_system_description: str | None = None
+    uptime_seconds: int | None = None
+    cpu_usage_percent: float | None = None
+    memory_total_bytes: int | None = None
+    memory_used_bytes: int | None = None
+    disk_total_bytes: int | None = None
+    disk_used_bytes: int | None = None
+    temperature_celsius: float | None = None
+    voltage_volts: float | None = None
+    dhcp_lease_count: int | None = None
+    arp_entry_count: int | None = None
 
 
 class DeviceDetail(DeviceRead):

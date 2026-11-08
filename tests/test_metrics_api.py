@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from app.models import NetworkInterface
 from app.services import prometheus
 from httpx import AsyncClient
 
@@ -33,7 +34,7 @@ def instant(value: str) -> list[dict[str, Any]]:
 
 async def test_health_alias(client: AsyncClient):
     response = await client.get("/api/health")
-    assert response.status_code == 200
+    assert response.status_code == 200, response.json()
     assert response.json() == {"status": "ok"}
 
 
@@ -160,3 +161,61 @@ async def test_device_metrics_prometheus_failure_returns_502(
     response = await client.get(f"/api/devices/{device['id']}/metrics")
     assert response.status_code == 502
     assert "prometheus query failed" in response.json()["detail"]
+
+
+async def test_interface_speed_override_and_bandwidth_metrics(
+    client: AsyncClient, session, monkeypatch
+):
+    device = await make_device(client)
+    interface = NetworkInterface(
+        device_id=device["id"],
+        if_index=3,
+        name="ether3",
+        link_speed_mbps=1000,
+    )
+    session.add(interface)
+    await session.commit()
+
+    updated = await client.patch(
+        f"/api/devices/{device['id']}/interfaces/{interface.id}",
+        json={"link_speed_override_mbps": 2500},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["link_speed_override_mbps"] == 2500
+
+    observed_queries: list[str] = []
+
+    async def fake_range(expression: str, *, start, end, step_seconds: int):
+        observed_queries.append(expression)
+        return [
+            {
+                "metric": {},
+                "values": [[1_700_000_000, "12.5"]],
+            }
+        ]
+
+    monkeypatch.setattr(prometheus, "query_range", fake_range)
+    response = await client.get(
+        f"/api/devices/{device['id']}/interfaces/{interface.id}/metrics",
+        params={"range_hours": 168, "step_seconds": 1800},
+    )
+    assert response.status_code == 200, response.json()
+    body = response.json()
+    assert body["interface_name"] == "ether3"
+    assert body["range_seconds"] == 168 * 3600
+    assert body["in_bits_per_second"] == [
+        {"t": 1_700_000_000.0, "value": 12.5}
+    ]
+    assert len(observed_queries) == 8
+    assert all(
+        'device="metrics-rtr1"' in query
+        and 'interface="ether3"' in query
+        and 'site="MET"' in query
+        for query in observed_queries
+    )
+
+    invalid_range = await client.get(
+        f"/api/devices/{device['id']}/interfaces/{interface.id}/metrics",
+        params={"range_hours": 48},
+    )
+    assert invalid_range.status_code == 422

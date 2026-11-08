@@ -4,21 +4,152 @@ import math
 from datetime import UTC, datetime
 
 import pytest
-from app.models import CredentialProfile, CredentialType, Device, Site
+from app.models import CredentialProfile, CredentialType, Device, NetworkInterface, Site
 from app.services.credentials import encrypt_secret
 from app.worker import (
     DEVICE_UP,
+    INTERFACE_IN_BYTES,
     PING_LATENCY,
     PING_PACKET_LOSS,
     PingResult,
+    _aggregate_host_resources,
+    _counter_delta,
     configured_check,
     list_poll_targets,
     poll_device,
     poll_due_devices,
+    save_interface_telemetry,
 )
 from cryptography.fernet import Fernet
+from sqlalchemy import select
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+
+
+def test_aggregate_host_resources_uses_average_cpu_and_ram_storage():
+    cpu, total_memory, used_memory = _aggregate_host_resources(
+        processor_loads={1: 20, 2: 80},
+        storage_types={1: 2, 2: 4, 3: 2},
+        storage_allocation_units={1: 1024, 2: 1024, 3: 4096},
+        storage_sizes={1: 1000, 2: 2048, 3: 10},
+        storage_used={1: 400, 2: 1900, 3: 5},
+    )
+
+    assert cpu == 50
+    assert total_memory == 1_064_960
+    assert used_memory == 430_080
+
+
+def test_aggregate_host_resources_reports_missing_tables_as_unavailable():
+    assert _aggregate_host_resources({}, {}, {}, {}, {}) == (None, None, None)
+
+
+async def test_poll_host_resources_reads_standard_mib_tables(monkeypatch):
+    from app import worker
+
+    tables = {
+        "1.3.6.1.2.1.25.3.3.1.2": {1: 20, 2: 80},
+        "1.3.6.1.2.1.25.2.3.1.2": {1: 2},
+        "1.3.6.1.2.1.25.2.3.1.4": {1: 1024},
+        "1.3.6.1.2.1.25.2.3.1.5": {1: 1000},
+        "1.3.6.1.2.1.25.2.3.1.6": {1: 400},
+    }
+    walked_oids = []
+
+    async def fake_snmp_walk(engine, auth, target, oid):
+        walked_oids.append(oid)
+        return tables[oid]
+
+    monkeypatch.setattr(worker, "_snmp_walk", fake_snmp_walk)
+
+    metrics = await worker._poll_host_resources(None, None, None, "generic")
+
+    assert metrics == (50, 1_024_000, 409_600)
+    assert len(walked_oids) == 5
+
+
+@pytest.mark.parametrize(
+    ("current", "previous", "bits", "expected"),
+    [
+        (15, 10, 64, 5),
+        (3, 10, 64, 3),
+        (10, None, 64, 0),
+        (3, (1 << 64) - 2, 64, 5),
+        (2, (1 << 32) - 1, 32, 3),
+    ],
+)
+def test_counter_delta_handles_increments_resets_and_baselines(
+    current, previous, bits, expected
+):
+    assert _counter_delta(current, previous, bits=bits) == expected
+
+
+async def test_interface_telemetry_persists_snapshots_and_exports_counter_delta(
+    session,
+):
+    site = await make_site(session, "IT")
+    device = Device(
+        site_id=site.id,
+        site=site,
+        name="telemetry-counter-test",
+        mgmt_ip="10.30.0.10",
+    )
+    session.add(device)
+    await session.flush()
+    labels = (device.name, "ether1", site.code)
+    counter = INTERFACE_IN_BYTES.labels(*labels)
+    initial_total = counter._value.get()
+
+    await save_interface_telemetry(
+        session,
+        device,
+        {
+            1: {
+                "name": "ether1",
+                "alias": "uplink",
+                "admin": 1,
+                "oper": 1,
+                "speed": 1000,
+                "in_octets": 100,
+                "out_octets": 200,
+                "in_errors": 2,
+                "out_errors": 0,
+                "in_discards": 0,
+                "out_discards": 1,
+            }
+        },
+    )
+    await save_interface_telemetry(
+        session,
+        device,
+        {
+            1: {
+                "name": "ether1",
+                "alias": "uplink",
+                "admin": 1,
+                "oper": 1,
+                "speed": 1000,
+                "in_octets": 150,
+                "out_octets": 240,
+                "in_errors": 3,
+                "out_errors": 0,
+                "in_discards": 0,
+                "out_discards": 1,
+            }
+        },
+    )
+
+    row = await session.scalar(
+        select(NetworkInterface).where(
+            NetworkInterface.device_id == device.id,
+            NetworkInterface.if_index == 1,
+        )
+    )
+    assert row is not None
+    assert row.alias == "uplink"
+    assert row.link_speed_mbps == 1000
+    assert int(row.last_in_octets) == 150
+    assert counter._value.get() - initial_total == 50
 
 
 async def make_site(session, code: str = "W") -> Site:
@@ -202,6 +333,7 @@ async def test_configured_snmp_check_decrypts_profile_secret(
 
 async def test_routeros_api_check_uses_https_and_profile_options(monkeypatch):
     from app import worker
+    from app.collectors import mikrotik
 
     calls = {}
 
@@ -225,7 +357,7 @@ async def test_routeros_api_check_uses_https_and_profile_options(monkeypatch):
             calls["auth"] = auth
             return FakeResponse()
 
-    monkeypatch.setattr(worker.httpx, "AsyncClient", FakeClient)
+    monkeypatch.setattr(mikrotik.httpx, "AsyncClient", FakeClient)
     result = await worker.routeros_api_check(
         "2001:db8::1",
         8443,

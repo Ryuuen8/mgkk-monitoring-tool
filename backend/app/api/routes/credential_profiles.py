@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
 from app.models import CredentialProfile, CredentialType, Device
+from app.models.credentials import SnmpPrivacyProtocol
 from app.schemas import (
     CredentialProfileCreate,
     CredentialProfileRead,
@@ -23,7 +24,10 @@ router = APIRouter(prefix="/credential-profiles", tags=["credential profiles"])
 
 
 def _default_port(credential_type: CredentialType) -> int:
-    return 161 if credential_type == CredentialType.SNMP_V2C else 443
+    return 161 if credential_type in {
+        CredentialType.SNMP_V2C,
+        CredentialType.SNMP_V3,
+    } else 443
 
 
 def _validate_profile_fields(
@@ -62,6 +66,9 @@ async def create_credential_profile(
 ) -> CredentialProfileRead:
     try:
         ciphertext = encrypt_secret(payload.secret)
+        privacy_ciphertext = (
+            encrypt_secret(payload.privacy_secret) if payload.privacy_secret else None
+        )
     except CredentialConfigurationError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
 
@@ -70,6 +77,9 @@ async def create_credential_profile(
         credential_type=payload.credential_type,
         username=payload.username,
         secret_ciphertext=ciphertext,
+        auth_protocol=payload.auth_protocol,
+        privacy_protocol=payload.privacy_protocol,
+        privacy_secret_ciphertext=privacy_ciphertext,
         port=payload.port or _default_port(payload.credential_type),
         verify_tls=payload.verify_tls,
     )
@@ -99,6 +109,8 @@ async def update_credential_profile(
     changes: dict[str, Any] = payload.model_dump(exclude_unset=True)
     secret_was_sent = "secret" in changes
     secret = changes.pop("secret", None)
+    privacy_secret_was_sent = "privacy_secret" in changes
+    privacy_secret = changes.pop("privacy_secret", None)
     if secret_was_sent and secret is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "secret may not be null"
@@ -114,7 +126,51 @@ async def update_credential_profile(
         )
     credential_type = changes.get("credential_type", profile.credential_type)
     username = changes.get("username", profile.username)
-    _validate_profile_fields(credential_type, username)
+    auth_protocol = changes.get("auth_protocol", profile.auth_protocol)
+    privacy_protocol = changes.get("privacy_protocol", profile.privacy_protocol)
+    if credential_type == CredentialType.SNMP_V2C and (
+        username is not None
+        or auth_protocol is not None
+        or privacy_protocol is not None
+        or (privacy_secret_was_sent and privacy_secret is not None)
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "SNMP v2c profiles use a community string only",
+        )
+    if credential_type == CredentialType.SNMP_V3:
+        if not username or auth_protocol is None or privacy_protocol is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "SNMP v3 requires a username and security protocol selection",
+            )
+        if secret is not None and len(secret.encode("utf-8")) < 8:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "SNMP v3 authentication passphrases need 8 bytes",
+            )
+        if privacy_secret is not None and len(privacy_secret.encode("utf-8")) < 8:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "SNMP v3 privacy passphrases need 8 bytes",
+            )
+        has_privacy_secret = (
+            privacy_secret is not None
+            if privacy_secret_was_sent
+            else profile.privacy_secret_ciphertext is not None
+        )
+        if (privacy_protocol == SnmpPrivacyProtocol.AES128) != has_privacy_secret:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "AES-128 privacy requires a privacy secret",
+            )
+    else:
+        _validate_profile_fields(credential_type, username)
+        if auth_protocol is not None or privacy_protocol is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                "SNMP security options only apply to SNMP v3",
+            )
     if credential_type != profile.credential_type:
         used = await session.scalar(
             select(func.count()).select_from(Device).where(
@@ -128,12 +184,29 @@ async def update_credential_profile(
             )
 
     for field, value in changes.items():
-        if value is None and field not in {"port"}:
+        if value is None and field not in {
+            "port",
+            "privacy_protocol",
+            "username",
+            "auth_protocol",
+        }:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"field may not be null: {field}",
             )
         setattr(profile, field, value)
+    if (
+        credential_type != CredentialType.SNMP_V3
+        or privacy_protocol == SnmpPrivacyProtocol.NONE
+    ):
+        profile.privacy_secret_ciphertext = None
+    elif privacy_secret_was_sent and privacy_secret is not None:
+        try:
+            profile.privacy_secret_ciphertext = encrypt_secret(privacy_secret)
+        except CredentialConfigurationError as exc:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)
+            ) from exc
     if "port" in changes and changes["port"] is None:
         profile.port = _default_port(credential_type)
     if secret is not None:

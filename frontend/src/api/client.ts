@@ -10,14 +10,19 @@ export type DeviceStatus = components["schemas"]["DeviceStatusRead"];
 export type DeviceMetrics = components["schemas"]["DeviceMetrics"];
 export type DeviceType = components["schemas"]["DeviceType"];
 export type CheckType = components["schemas"]["DeviceCheckType"];
+export type CollectorType = components["schemas"]["CollectorType"];
 export type CredentialType = components["schemas"]["CredentialType"];
 export type CredentialProfile =
   components["schemas"]["CredentialProfileRead"];
+export type SnmpAuthProtocol = components["schemas"]["SnmpAuthProtocol"];
+export type SnmpPrivacyProtocol = components["schemas"]["SnmpPrivacyProtocol"];
 export type DeviceCreate = components["schemas"]["DeviceCreate"];
 export type DeviceUpdate = components["schemas"]["DeviceUpdate"];
 export type Site = components["schemas"]["SiteRead"];
 export type DeviceGroup = components["schemas"]["DeviceGroupRead"];
 export type MetricPoint = components["schemas"]["MetricPoint"];
+export type InterfaceMetrics = components["schemas"]["InterfaceMetrics"];
+export type NetworkInterface = components["schemas"]["NetworkInterfaceRead"];
 
 export const DEVICE_TYPES: DeviceType[] = [
   "router",
@@ -64,9 +69,9 @@ export function formatCheckType(type: CheckType | undefined): string {
     case "ping_only":
       return "Ping only";
     case "snmp":
-      return "SNMP v2c";
+      return "SNMP";
     case "routeros_api":
-      return "RouterOS REST API";
+      return "RouterOS API";
     default:
       return "Ping only";
   }

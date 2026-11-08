@@ -1,0 +1,165 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "graphTooltip": 0,
+  "id": null,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 0, "y": 0},
+      "id": 1,
+      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "targets": [{"expr": "device_cpu_usage_percent{device=~\"$device\"}", "refId": "A"}],
+      "title": "CPU load",
+      "type": "gauge"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 6, "y": 0},
+      "id": 2,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [{"expr": "device_memory_usage_bytes{device=~\"$device\"}", "legendFormat": "memory used", "refId": "A"}],
+      "title": "Memory used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "bytes", "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 6, "x": 12, "y": 0},
+      "id": 3,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [{"expr": "device_disk_usage_bytes{device=~\"$device\"}", "legendFormat": "disk used", "refId": "A"}],
+      "title": "Disk used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {"unit": "celsius", "min": 0},
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "voltage (V)"},
+            "properties": [{"id": "unit", "value": "volt"}]
+          }
+        ]
+      },
+      "gridPos": {"h": 7, "w": 6, "x": 18, "y": 0},
+      "id": 4,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [
+        {"expr": "device_temperature_celsius{device=~\"$device\"}", "legendFormat": "temperature", "refId": "A"},
+        {"expr": "device_voltage_volts{device=~\"$device\"}", "legendFormat": "voltage (V)", "refId": "B"}
+      ],
+      "title": "Temperature and voltage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 7},
+      "id": 5,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [
+        {"expr": "mikrotik_dhcp_lease_count{device=~\"$device\"}", "legendFormat": "DHCP leases", "refId": "A"},
+        {"expr": "mikrotik_arp_entry_count{device=~\"$device\"}", "legendFormat": "ARP entries", "refId": "B"}
+      ],
+      "title": "DHCP leases and ARP entries",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "bps", "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 16, "x": 8, "y": 7},
+      "id": 6,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [
+        {"expr": "rate(interface_in_bytes_total{device=~\"$device\"}[5m]) * 8", "legendFormat": "{{interface}} in", "refId": "A"},
+        {"expr": "rate(interface_out_bytes_total{device=~\"$device\"}[5m]) * 8", "legendFormat": "{{interface}} out", "refId": "B"}
+      ],
+      "title": "Interface traffic",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 14},
+      "id": 7,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [
+        {"expr": "interface_in_link_utilization_ratio{device=~\"$device\"}", "legendFormat": "{{interface}} in", "refId": "A"},
+        {"expr": "interface_out_link_utilization_ratio{device=~\"$device\"}", "legendFormat": "{{interface}} out", "refId": "B"}
+      ],
+      "title": "Interface utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {
+        "defaults": {"unit": "dBm"},
+        "overrides": [
+          {
+            "matcher": {"id": "byRegexp", "options": ".* clients"},
+            "properties": [{"id": "unit", "value": "short"}]
+          }
+        ]
+      },
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 14},
+      "id": 8,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [
+        {"expr": "mikrotik_wireless_client_count{device=~\"$device\"}", "legendFormat": "{{interface}} clients", "refId": "A"},
+        {"expr": "mikrotik_wireless_signal_strength_dbm{device=~\"$device\"}", "legendFormat": "{{interface}} avg signal", "refId": "B"}
+      ],
+      "title": "Wireless clients and signal",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["mgkk", "mikrotik", "network"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "definition": "label_values(mikrotik_dhcp_lease_count, device)",
+        "includeAll": true,
+        "multi": true,
+        "name": "device",
+        "query": "label_values(mikrotik_dhcp_lease_count, device)",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-24h", "to": "now"},
+  "timezone": "browser",
+  "title": "MikroTik Router Health",
+  "uid": "mgkk-mikrotik-router-health",
+  "version": 1
+}

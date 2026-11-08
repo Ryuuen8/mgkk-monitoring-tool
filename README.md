@@ -2,6 +2,8 @@
 
 See [System flow and presentation guide](./docs/system-flow.md) for the
 architecture, end-to-end poll flow, MikroTik demo walkthrough, and talk track.
+The frontend also has a **Guide** tab with an in-app walkthrough of each UI
+screen and its controls.
 
 ## Start the infrastructure
 
@@ -19,11 +21,14 @@ docker compose up --build
 
 The Compose stack includes the FastAPI API, a device poller worker,
 PostgreSQL, Redis, Prometheus, and Grafana. The poller can check devices using
-ICMP, SNMPv2c, or the MikroTik RouterOS REST API over HTTPS. The worker has
-`NET_RAW` for ICMP. On Docker Desktop for Windows, additional routing or
-bridging may be needed for the poller container to reach a lab subnet; verify
-connectivity from inside that container. The API exposes `/health` and
-`/metrics`.
+ICMP, SNMPv2c/v3, or the MikroTik RouterOS REST or binary API. SNMP and
+RouterOS API checks collect system/interface telemetry. MikroTik SNMP reports
+CPU and memory through its vendor MIB; generic SNMP uses HOST-RESOURCES-MIB
+when the agent implements it. Grafana dashboards are provisioned from
+`deploy/`. The worker has `NET_RAW` for ICMP. On Docker Desktop for Windows,
+additional routing or bridging may be needed for the poller container to reach
+a lab subnet; verify connectivity from inside that container. The API exposes
+`/health` and `/metrics`.
 
 Services are bound to localhost:
 
@@ -112,13 +117,25 @@ in `backend/app/main.py`. Interactive docs: <http://localhost:8000/docs>.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/devices?site_id=&is_active=&device_type=&limit=50&offset=0` | Filtered, paginated list (`Page[DeviceRead]`) |
+| `GET` | `/api/devices/status` | Latest check status, latency, packet loss, and last-seen time for each device |
 | `GET` | `/api/devices/{device_id}` | Detail with `site`, `groups`, `parent` |
+| `GET` | `/api/devices/{device_id}/metrics?range_minutes=60&step_seconds=30` | Latency, availability, and packet-loss history; range is 5–1440 minutes |
+| `GET` | `/api/devices/{device_id}/interfaces` | Discovered SNMP or RouterOS interface inventory and link speeds |
+| `PATCH` | `/api/devices/{device_id}/interfaces/{interface_id}` | Set/clear a positive link-speed override in Mbps |
+| `GET` | `/api/devices/{device_id}/interfaces/{interface_id}/metrics?range_hours=24&step_seconds=300` | Traffic, error, discard, and utilization samples; `range_hours` must be 24, 168, or 720 |
 | `POST` | `/api/devices` | Create, `201`; duplicate `name` → `409`; unknown `site_id`/`group_ids`/`parent_device_id` → `422` |
 | `PATCH` | `/api/devices/{device_id}` | Partial update; `group_ids` replaces membership; own-parent → `422` |
 | `DELETE` | `/api/devices/{device_id}` | Delete, `204`; children's `parent_device_id` becomes `NULL` |
 
-`check_type` is `ping_only`, `snmp`, or `routeros_api`. SNMP and RouterOS API
-checks require a `credential_profile_id` whose profile type matches the check.
+`PATCH` bodies use `exclude_unset`, so omitted fields are untouched. An
+explicit `null` for a NOT NULL column returns `422`.
+
+`check_type` is `ping_only`, `snmp`, or `routeros_api`. Devices also select a
+`collector`: `generic` for standard SNMP or `mikrotik` for RouterOS-specific
+collection. RouterOS API checks require the MikroTik collector. SNMP and
+RouterOS API checks require a matching encrypted credential profile; SNMP
+accepts either v2c or v3. Interface metrics have only `device`, `interface`,
+and `site` labels.
 
 ### Device groups
 
@@ -132,25 +149,39 @@ checks require a `credential_profile_id` whose profile type matches the check.
 | `GET` | `/api/device-groups/{group_id}/devices` | Members (`Page[DeviceRead]`) |
 | `POST` | `/api/device-groups/{group_id}/devices` | Add members (`{"device_ids": [...]}`), `204`, idempotent |
 | `DELETE` | `/api/device-groups/{group_id}/devices/{device_id}` | Remove one member, `204` |
+
+### Credential profiles
+
+| Method | Path | Description |
+|---|---|---|
 | `GET` | `/api/credential-profiles` | List profiles without returning stored secrets |
-| `POST` | `/api/credential-profiles` | Create an encrypted SNMP v2c or RouterOS API profile |
+| `POST` | `/api/credential-profiles` | Create an encrypted SNMP v2c/v3 or RouterOS API profile |
 | `PATCH` | `/api/credential-profiles/{profile_id}` | Update profile metadata or replace its secret |
 | `DELETE` | `/api/credential-profiles/{profile_id}` | Delete an unused profile; assigned profiles return `409` |
 
-`PATCH` bodies use `exclude_unset`, so omitted fields are untouched. An
-explicit `null` for a NOT NULL column returns `422`.
-
 ## MikroTik and protocol checks
 
-Set a device's vendor to `mikrotik` and select its check type in the device
-form. RouterOS API checks use the RouterOS REST endpoint
-(`/rest/system/resource`) over HTTPS; SNMP checks currently use SNMPv2c and
-read `sysUpTime`. These checks confirm reachability and authentication; they
-do not yet collect full interface or system inventory.
+Choose the collector explicitly in the device form. Generic SNMP and MikroTik
+SNMP use the same system and IF-MIB interface polling path, including the
+64-bit `ifHCInOctets`/`ifHCOutOctets` counters and `ifHighSpeed`; MikroTik adds
+vendor CPU, memory, disk, temperature, and voltage metrics. Generic CPU and
+memory use HOST-RESOURCES-MIB when the agent implements it.
+
+The MikroTik collector supports RouterOS REST on v7.1+ and falls back to the
+binary API-SSL service on port 8729 for v6 devices. To use the unencrypted
+binary API on port 8728, set that port explicitly in the credential profile.
+It reads system resources/health, interface counters, DHCP lease and ARP
+totals, and wireless registration summaries. DHCP/ARP values are counts; wireless metrics are
+aggregated by interface. Client addresses, MACs, and hostnames are never stored
+as metric labels. Interface octet/error/discard values are Prometheus counters;
+the UI graphs `rate()` results and speed-normalized utilization over 24 hours,
+7 days, or 30 days. Counter snapshots persist between polls to handle resets.
 
 Non-ICMP checks require a reusable credential profile. SNMP profiles contain a
-read-only community string; RouterOS API profiles contain a read-only username
-and password. Secrets are encrypted in PostgreSQL with Fernet. Generate a key
+read-only community string or SNMPv3 username, SHA/SHA-256 authentication
+passphrase, and optional AES-128 privacy passphrase; RouterOS API profiles
+contain a read-only username and password. All secrets are encrypted in
+PostgreSQL with Fernet. Generate a key
 and put it in `.env` as `CREDENTIAL_ENCRYPTION_KEY` before starting Compose:
 
 ```powershell
@@ -162,11 +193,14 @@ to use saved credentials, and changing it makes existing profile secrets
 unreadable. RouterOS API profiles verify TLS certificates by default. For a
 lab router using a self-signed certificate, you can explicitly disable
 verification in the profile; prefer a trusted certificate outside a lab.
+RouterOS v6 requires the binary API-SSL service (8729) for automatic fallback;
+the unencrypted API service (8728) can be selected explicitly in the profile.
+RouterOS v7.1+ can use the HTTPS REST service.
 Credential profile API responses never contain the secret. The app does not
 currently provide user authentication, so keep the API restricted to trusted
 networks.
 
 The Compose file does not create MikroTik CHR instances or a routed lab
-network. Configure SNMP and `www-ssl` on each router, create a read-only
-monitoring account, and ensure the poller container can reach the router's
-management IP and selected service port.
+network. Configure SNMP and/or the RouterOS API service on each router, create
+a read-only monitoring account, and ensure the poller container can reach the
+router's management IP and selected service port.

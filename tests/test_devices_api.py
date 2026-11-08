@@ -141,6 +141,34 @@ async def test_invalid_device_payload_returns_422(client: AsyncClient):
     assert (
         await make_device(client, site["id"], mgmt_ip="999.1.1.1")
     ).status_code == 422
+
+
+async def test_routeros_api_requires_mikrotik_collector(
+    client: AsyncClient, monkeypatch
+):
+    from cryptography.fernet import Fernet
+
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    site = await make_site(client)
+    profile = await client.post(
+        "/api/credential-profiles",
+        json={
+            "name": "RouterOS API",
+            "credential_type": "routeros_api",
+            "username": "monitor",
+            "secret": "read-only-password",
+        },
+    )
+    assert profile.status_code == 201
+    response = await make_device(
+        client,
+        site["id"],
+        check_type="routeros_api",
+        collector="generic",
+        credential_profile_id=profile.json()["id"],
+    )
+    assert response.status_code == 422
+    assert "MikroTik collector" in response.json()["detail"]
     assert (
         await make_device(client, site["id"], poll_interval_seconds=1)
     ).status_code == 422

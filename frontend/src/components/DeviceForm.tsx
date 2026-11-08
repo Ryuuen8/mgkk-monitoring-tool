@@ -10,6 +10,7 @@ import {
   type CheckType,
   type CredentialProfile,
   type CredentialType,
+  type CollectorType,
   type DeviceCreate,
   type DeviceGroup,
   type DeviceType,
@@ -33,6 +34,7 @@ type FormState = {
   os_version: string;
   serial_number: string;
   check_type: CheckType;
+  collector: CollectorType;
   credential_profile_id: string;
   poll_interval_seconds: string;
   is_active: boolean;
@@ -51,6 +53,7 @@ const EMPTY_FORM: FormState = {
   os_version: "",
   serial_number: "",
   check_type: "ping_only",
+  collector: "generic",
   credential_profile_id: "",
   poll_interval_seconds: "60",
   is_active: true,
@@ -133,6 +136,7 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
           os_version: data.os_version ?? "",
           serial_number: data.serial_number ?? "",
           check_type: data.check_type ?? "ping_only",
+          collector: data.collector ?? "generic",
           credential_profile_id:
             data.credential_profile_id == null
               ? ""
@@ -199,6 +203,7 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
       os_version: form.os_version.trim() || null,
       serial_number: form.serial_number.trim() || null,
       check_type: form.check_type,
+      collector: form.collector,
       credential_profile_id:
         form.credential_profile_id === ""
           ? null
@@ -438,6 +443,9 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
                     update("vendor", "mikrotik");
                     update("device_type", "router");
                   }
+                  if (checkType === "routeros_api") {
+                    update("collector", "mikrotik");
+                  }
                 }}
               >
                 {CHECK_TYPES.map((type) => (
@@ -451,6 +459,18 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
                       : formatCheckType(type)}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Telemetry collector</span>
+              <select
+                value={form.collector}
+                onChange={(event) =>
+                  update("collector", event.target.value as CollectorType)
+                }
+              >
+                <option value="generic">Generic SNMP</option>
+                <option value="mikrotik">MikroTik</option>
               </select>
             </label>
             {form.check_type !== "ping_only" && (
@@ -467,10 +487,10 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
                   {credentialProfiles
                     .filter(
                       (profile) =>
-                        profile.credential_type ===
-                        (form.check_type === "snmp"
-                          ? "snmp_v2c"
-                          : "routeros_api"),
+                        form.check_type === "snmp"
+                          ? profile.credential_type === "snmp_v2c" ||
+                            profile.credential_type === "snmp_v3"
+                          : profile.credential_type === "routeros_api",
                     )
                     .map((profile) => (
                       <option key={profile.id} value={profile.id}>
@@ -595,7 +615,9 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
               )}
               <p className="muted">
                 Secrets are encrypted before storage and are never returned by
-                the API. RouterOS API profiles require HTTPS.
+                the API. RouterOS REST uses HTTPS; v6 falls back to the
+                binary API-SSL on TCP 8729. Port 8728 is unencrypted and must
+                be set explicitly.
               </p>
             </div>
           )}

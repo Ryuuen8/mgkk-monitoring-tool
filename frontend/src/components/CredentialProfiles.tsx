@@ -5,6 +5,8 @@ import {
   errorMessage,
   type CredentialProfile,
   type CredentialType,
+  type SnmpAuthProtocol,
+  type SnmpPrivacyProtocol,
 } from "../api/client";
 
 type CredentialProfilesProps = {
@@ -16,6 +18,9 @@ type ProfileForm = {
   credential_type: CredentialType;
   username: string;
   secret: string;
+  auth_protocol: SnmpAuthProtocol;
+  privacy_protocol: SnmpPrivacyProtocol;
+  privacy_secret: string;
   port: string;
   verify_tls: boolean;
 };
@@ -25,12 +30,22 @@ const EMPTY_FORM: ProfileForm = {
   credential_type: "snmp_v2c",
   username: "",
   secret: "",
+  auth_protocol: "sha",
+  privacy_protocol: "none",
+  privacy_secret: "",
   port: "161",
   verify_tls: true,
 };
 
 function profileTypeLabel(type: CredentialType): string {
-  return type === "snmp_v2c" ? "SNMP v2c" : "RouterOS API";
+  switch (type) {
+    case "snmp_v2c":
+      return "SNMP v2c";
+    case "snmp_v3":
+      return "SNMP v3";
+    case "routeros_api":
+      return "RouterOS API";
+  }
 }
 
 function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
@@ -78,6 +93,9 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
       credential_type: profile.credential_type,
       username: profile.username ?? "",
       secret: "",
+      auth_protocol: profile.auth_protocol ?? "sha",
+      privacy_protocol: profile.privacy_protocol ?? "none",
+      privacy_secret: "",
       port: String(profile.port),
       verify_tls: profile.verify_tls,
     });
@@ -89,7 +107,7 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
     setForm((current) => ({
       ...current,
       credential_type: type,
-      port: type === "snmp_v2c" ? "161" : "443",
+      port: type === "routeros_api" ? "443" : "161",
     }));
   };
 
@@ -106,10 +124,23 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
             name: form.name.trim(),
             credential_type: form.credential_type,
             username:
-              form.credential_type === "routeros_api"
+              form.credential_type !== "snmp_v2c"
                 ? form.username.trim()
                 : null,
             secret: form.secret,
+            auth_protocol:
+              form.credential_type === "snmp_v3"
+                ? form.auth_protocol
+                : null,
+            privacy_protocol:
+              form.credential_type === "snmp_v3"
+                ? form.privacy_protocol
+                : null,
+            privacy_secret:
+              form.credential_type === "snmp_v3" &&
+              form.privacy_protocol === "aes128"
+                ? form.privacy_secret
+                : null,
             port: Number(form.port),
             verify_tls: form.verify_tls,
           },
@@ -132,10 +163,23 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
           body: {
             name: form.name.trim(),
             username:
-              form.credential_type === "routeros_api"
+              form.credential_type !== "snmp_v2c"
                 ? form.username.trim()
                 : null,
             secret: form.secret || undefined,
+            auth_protocol:
+              form.credential_type === "snmp_v3"
+                ? form.auth_protocol
+                : null,
+            privacy_protocol:
+              form.credential_type === "snmp_v3"
+                ? form.privacy_protocol
+                : null,
+            privacy_secret:
+              form.credential_type === "snmp_v3" &&
+              form.privacy_protocol === "aes128"
+                ? form.privacy_secret || undefined
+                : null,
             port: Number(form.port),
             verify_tls: form.verify_tls,
           },
@@ -235,12 +279,17 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                   }
                 >
                   <option value="snmp_v2c">SNMP v2c</option>
+                  <option value="snmp_v3">SNMP v3</option>
                   <option value="routeros_api">RouterOS API</option>
                 </select>
               </label>
-              {form.credential_type === "routeros_api" && (
+              {form.credential_type !== "snmp_v2c" && (
                 <label className="field">
-                  <span>Read-only username *</span>
+                  <span>
+                    {form.credential_type === "snmp_v3"
+                      ? "Security username *"
+                      : "Read-only username *"}
+                  </span>
                   <input
                     required
                     maxLength={120}
@@ -260,13 +309,20 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                     ? editingId === null
                       ? "Read-only community"
                       : "Replace community (optional)"
-                    : editingId === null
-                      ? "Password"
-                      : "Replace password (optional)"}
+                    : form.credential_type === "snmp_v3"
+                      ? editingId === null
+                        ? "Authentication passphrase"
+                        : "Replace authentication passphrase (optional)"
+                      : editingId === null
+                        ? "Password"
+                        : "Replace password (optional)"}
                   {editingId === null ? " *" : ""}
                 </span>
                 <input
                   required={editingId === null}
+                  minLength={
+                    form.credential_type === "snmp_v3" ? 8 : undefined
+                  }
                   type="password"
                   autoComplete="new-password"
                   value={form.secret}
@@ -275,6 +331,71 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                   }
                 />
               </label>
+              {form.credential_type === "snmp_v3" && (
+                <>
+                  <label className="field">
+                    <span>Authentication protocol</span>
+                    <select
+                      value={form.auth_protocol}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          auth_protocol: event.target.value as SnmpAuthProtocol,
+                        }))
+                      }
+                    >
+                      <option value="sha">SHA-1</option>
+                      <option value="sha256">SHA-256</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Privacy protocol</span>
+                    <select
+                      value={form.privacy_protocol}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          privacy_protocol: event.target.value as SnmpPrivacyProtocol,
+                          privacy_secret: "",
+                        }))
+                      }
+                    >
+                      <option value="none">No privacy</option>
+                      <option value="aes128">AES-128</option>
+                    </select>
+                  </label>
+                  {form.privacy_protocol === "aes128" && (
+                    <label className="field">
+                      <span>
+                        Privacy passphrase
+                        {editingId === null
+                          ? " *"
+                          : profiles.find((item) => item.id === editingId)
+                                ?.privacy_secret_configured
+                            ? " (leave blank to keep current)"
+                            : " *"}
+                      </span>
+                      <input
+                        required={
+                          editingId === null ||
+                          !profiles.find((item) => item.id === editingId)
+                            ?.privacy_secret_configured
+                        }
+                        minLength={8}
+                        type="password"
+                        autoComplete="new-password"
+                        value={form.privacy_secret}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            privacy_secret: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  )}
+                </>
+              )}
               <label className="field">
                 <span>Port</span>
                 <input
@@ -377,7 +498,9 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                       ? profile.verify_tls
                         ? "HTTPS · verified"
                         : "HTTPS · unverified"
-                      : "SNMPv2c"}
+                      : profile.credential_type === "snmp_v3"
+                        ? `SNMPv3 · ${profile.auth_protocol?.toUpperCase()} / ${profile.privacy_protocol?.toUpperCase()}`
+                        : "SNMPv2c"}
                   </td>
                   <td>
                     <div className="row-actions">

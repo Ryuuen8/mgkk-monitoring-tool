@@ -171,6 +171,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/devices/{device_id}/interfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Device Interfaces */
+        get: operations["list_device_interfaces_api_devices__device_id__interfaces_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/devices/{device_id}/interfaces/{interface_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Interface Link Speed */
+        patch: operations["update_interface_link_speed_api_devices__device_id__interfaces__interface_id__patch"];
+        trace?: never;
+    };
+    "/api/devices/{device_id}/interfaces/{interface_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Interface Metrics */
+        get: operations["get_interface_metrics_api_devices__device_id__interfaces__interface_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/devices/{device_id}/metrics": {
         parameters: {
             query?: never;
@@ -249,6 +300,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CollectorType
+         * @enum {string}
+         */
+        CollectorType: "generic" | "mikrotik";
         /** CredentialProfileCreate */
         CredentialProfileCreate: {
             /** Name */
@@ -258,6 +314,10 @@ export interface components {
             username?: string | null;
             /** Secret */
             secret: string;
+            auth_protocol?: components["schemas"]["SnmpAuthProtocol"] | null;
+            privacy_protocol?: components["schemas"]["SnmpPrivacyProtocol"] | null;
+            /** Privacy Secret */
+            privacy_secret?: string | null;
             /** Port */
             port?: number | null;
             /**
@@ -285,6 +345,8 @@ export interface components {
             credential_type: components["schemas"]["CredentialType"];
             /** Username */
             username: string | null;
+            auth_protocol: components["schemas"]["SnmpAuthProtocol"] | null;
+            privacy_protocol: components["schemas"]["SnmpPrivacyProtocol"] | null;
             /** Port */
             port: number;
             /** Verify Tls */
@@ -294,6 +356,11 @@ export interface components {
              * @default true
              */
             secret_configured: boolean;
+            /**
+             * Privacy Secret Configured
+             * @default false
+             */
+            privacy_secret_configured: boolean;
         };
         /** CredentialProfileRef */
         CredentialProfileRef: {
@@ -312,6 +379,10 @@ export interface components {
             username?: string | null;
             /** Secret */
             secret?: string | null;
+            auth_protocol?: components["schemas"]["SnmpAuthProtocol"] | null;
+            privacy_protocol?: components["schemas"]["SnmpPrivacyProtocol"] | null;
+            /** Privacy Secret */
+            privacy_secret?: string | null;
             /** Port */
             port?: number | null;
             /** Verify Tls */
@@ -321,7 +392,7 @@ export interface components {
          * CredentialType
          * @enum {string}
          */
-        CredentialType: "snmp_v2c" | "routeros_api";
+        CredentialType: "snmp_v2c" | "snmp_v3" | "routeros_api";
         /**
          * DeviceCheckType
          * @enum {string}
@@ -346,6 +417,8 @@ export interface components {
             device_type: components["schemas"]["DeviceType"];
             /** @default ping_only */
             check_type: components["schemas"]["DeviceCheckType"];
+            /** @default generic */
+            collector: components["schemas"]["CollectorType"];
             /** Credential Profile Id */
             credential_profile_id?: number | null;
             /** Vendor */
@@ -409,6 +482,8 @@ export interface components {
             device_type: components["schemas"]["DeviceType"];
             /** @default ping_only */
             check_type: components["schemas"]["DeviceCheckType"];
+            /** @default generic */
+            collector: components["schemas"]["CollectorType"];
             /** Credential Profile Id */
             credential_profile_id?: number | null;
             /** Vendor */
@@ -441,6 +516,30 @@ export interface components {
             id: number;
             /** Last Seen At */
             last_seen_at?: string | null;
+            /** Snmp System Name */
+            snmp_system_name?: string | null;
+            /** Snmp System Description */
+            snmp_system_description?: string | null;
+            /** Uptime Seconds */
+            uptime_seconds?: number | null;
+            /** Cpu Usage Percent */
+            cpu_usage_percent?: number | null;
+            /** Memory Total Bytes */
+            memory_total_bytes?: number | null;
+            /** Memory Used Bytes */
+            memory_used_bytes?: number | null;
+            /** Disk Total Bytes */
+            disk_total_bytes?: number | null;
+            /** Disk Used Bytes */
+            disk_used_bytes?: number | null;
+            /** Temperature Celsius */
+            temperature_celsius?: number | null;
+            /** Voltage Volts */
+            voltage_volts?: number | null;
+            /** Dhcp Lease Count */
+            dhcp_lease_count?: number | null;
+            /** Arp Entry Count */
+            arp_entry_count?: number | null;
             site: components["schemas"]["SiteRef"];
             /** Groups */
             groups?: components["schemas"]["DeviceGroupRef"][];
@@ -538,6 +637,8 @@ export interface components {
             device_type: components["schemas"]["DeviceType"];
             /** @default ping_only */
             check_type: components["schemas"]["DeviceCheckType"];
+            /** @default generic */
+            collector: components["schemas"]["CollectorType"];
             /** Credential Profile Id */
             credential_profile_id?: number | null;
             /** Vendor */
@@ -570,6 +671,30 @@ export interface components {
             id: number;
             /** Last Seen At */
             last_seen_at?: string | null;
+            /** Snmp System Name */
+            snmp_system_name?: string | null;
+            /** Snmp System Description */
+            snmp_system_description?: string | null;
+            /** Uptime Seconds */
+            uptime_seconds?: number | null;
+            /** Cpu Usage Percent */
+            cpu_usage_percent?: number | null;
+            /** Memory Total Bytes */
+            memory_total_bytes?: number | null;
+            /** Memory Used Bytes */
+            memory_used_bytes?: number | null;
+            /** Disk Total Bytes */
+            disk_total_bytes?: number | null;
+            /** Disk Used Bytes */
+            disk_used_bytes?: number | null;
+            /** Temperature Celsius */
+            temperature_celsius?: number | null;
+            /** Voltage Volts */
+            voltage_volts?: number | null;
+            /** Dhcp Lease Count */
+            dhcp_lease_count?: number | null;
+            /** Arp Entry Count */
+            arp_entry_count?: number | null;
         };
         /** DeviceRef */
         DeviceRef: {
@@ -627,6 +752,7 @@ export interface components {
             mac?: string | null;
             device_type?: components["schemas"]["DeviceType"] | null;
             check_type?: components["schemas"]["DeviceCheckType"] | null;
+            collector?: components["schemas"]["CollectorType"] | null;
             /** Credential Profile Id */
             credential_profile_id?: number | null;
             /** Vendor */
@@ -665,6 +791,38 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** InterfaceMetrics */
+        InterfaceMetrics: {
+            /** Interface Id */
+            interface_id: number;
+            /** Interface Name */
+            interface_name: string;
+            /** Range Seconds */
+            range_seconds: number;
+            /** Step Seconds */
+            step_seconds: number;
+            /** In Bits Per Second */
+            in_bits_per_second: components["schemas"]["MetricPoint"][];
+            /** Out Bits Per Second */
+            out_bits_per_second: components["schemas"]["MetricPoint"][];
+            /** In Errors Per Second */
+            in_errors_per_second: components["schemas"]["MetricPoint"][];
+            /** Out Errors Per Second */
+            out_errors_per_second: components["schemas"]["MetricPoint"][];
+            /** In Discards Per Second */
+            in_discards_per_second: components["schemas"]["MetricPoint"][];
+            /** Out Discards Per Second */
+            out_discards_per_second: components["schemas"]["MetricPoint"][];
+            /** In Utilization */
+            in_utilization: components["schemas"]["MetricPoint"][];
+            /** Out Utilization */
+            out_utilization: components["schemas"]["MetricPoint"][];
+        };
+        /** LinkSpeedOverrideUpdate */
+        LinkSpeedOverrideUpdate: {
+            /** Link Speed Override Mbps */
+            link_speed_override_mbps?: number | null;
+        };
         /**
          * MetricPoint
          * @description One sample: unix timestamp (seconds) and value.
@@ -674,6 +832,39 @@ export interface components {
             t: number;
             /** Value */
             value: number;
+        };
+        /** NetworkInterfaceRead */
+        NetworkInterfaceRead: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Id */
+            id: number;
+            /** Device Id */
+            device_id: number;
+            /** If Index */
+            if_index: number;
+            /** Name */
+            name: string;
+            /** Alias */
+            alias: string | null;
+            /** Admin Status */
+            admin_status: number | null;
+            /** Oper Status */
+            oper_status: number | null;
+            /** Link Speed Mbps */
+            link_speed_mbps: number | null;
+            /** Link Speed Override Mbps */
+            link_speed_override_mbps: number | null;
+            /** Last Polled At */
+            last_polled_at: string | null;
         };
         /** Page[DeviceGroupRead] */
         Page_DeviceGroupRead_: {
@@ -780,6 +971,16 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /**
+         * SnmpAuthProtocol
+         * @enum {string}
+         */
+        SnmpAuthProtocol: "sha" | "sha256";
+        /**
+         * SnmpPrivacyProtocol
+         * @enum {string}
+         */
+        SnmpPrivacyProtocol: "none" | "aes128";
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1352,6 +1553,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceStatusList"];
+                };
+            };
+        };
+    };
+    list_device_interfaces_api_devices__device_id__interfaces_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkInterfaceRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_interface_link_speed_api_devices__device_id__interfaces__interface_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: number;
+                interface_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkSpeedOverrideUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkInterfaceRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_interface_metrics_api_devices__device_id__interfaces__interface_id__metrics_get: {
+        parameters: {
+            query?: {
+                range_hours?: number;
+                step_seconds?: number;
+            };
+            header?: never;
+            path: {
+                device_id: number;
+                interface_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterfaceMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

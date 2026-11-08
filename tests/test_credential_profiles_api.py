@@ -94,6 +94,7 @@ async def test_device_check_requires_matching_profile(
             "name": "router-wrong-profile",
             "mgmt_ip": "192.168.88.2",
             "check_type": "routeros_api",
+            "collector": "mikrotik",
             "credential_profile_id": snmp_profile.json()["id"],
         },
     )
@@ -130,3 +131,97 @@ async def test_device_check_requires_matching_profile(
         f"/api/credential-profiles/{snmp_profile.json()['id']}"
     )
     assert deleted.status_code == 204
+
+
+async def test_snmp_v3_profile_encrypts_auth_and_privacy_secrets(
+    client: AsyncClient, session, monkeypatch
+):
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    response = await client.post(
+        "/api/credential-profiles",
+        json={
+            "name": "SNMPv3 router",
+            "credential_type": "snmp_v3",
+            "username": "monitor",
+            "secret": "auth-passphrase",
+            "auth_protocol": "sha256",
+            "privacy_protocol": "aes128",
+            "privacy_secret": "privacy-passphrase",
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["port"] == 161
+    assert data["auth_protocol"] == "sha256"
+    assert data["privacy_protocol"] == "aes128"
+    assert data["privacy_secret_configured"] is True
+    assert "secret" not in data
+    assert "privacy_secret" not in data
+
+    profile = await session.scalar(
+        select(CredentialProfile).where(CredentialProfile.id == data["id"])
+    )
+    assert profile is not None
+    assert decrypt_secret(profile.secret_ciphertext) == "auth-passphrase"
+    assert profile.privacy_secret_ciphertext is not None
+    assert decrypt_secret(profile.privacy_secret_ciphertext) == "privacy-passphrase"
+    site = await make_site(client)
+    device = await client.post(
+        "/api/devices",
+        json={
+            "site_id": site["id"],
+            "name": "snmpv3-device",
+            "mgmt_ip": "192.0.2.25",
+            "check_type": "snmp",
+            "credential_profile_id": data["id"],
+        },
+    )
+    assert device.status_code == 201
+
+
+async def test_snmp_v3_profile_requires_privacy_secret_for_aes128(
+    client: AsyncClient, monkeypatch
+):
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    response = await client.post(
+        "/api/credential-profiles",
+        json={
+            "name": "Invalid SNMPv3",
+            "credential_type": "snmp_v3",
+            "username": "monitor",
+            "secret": "auth-passphrase",
+            "auth_protocol": "sha",
+            "privacy_protocol": "aes128",
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_profile_update_can_disable_snmp_v3_privacy(
+    client: AsyncClient, monkeypatch
+):
+    monkeypatch.setenv("CREDENTIAL_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    created = await client.post(
+        "/api/credential-profiles",
+        json={
+            "name": "SNMPv3 privacy update",
+            "credential_type": "snmp_v3",
+            "username": "monitor",
+            "secret": "auth-passphrase",
+            "auth_protocol": "sha",
+            "privacy_protocol": "aes128",
+            "privacy_secret": "privacy-passphrase",
+        },
+    )
+    assert created.status_code == 201
+
+    updated = await client.patch(
+        f"/api/credential-profiles/{created.json()['id']}",
+        json={
+            "privacy_protocol": "none",
+            "privacy_secret": None,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["privacy_protocol"] == "none"
+    assert updated.json()["privacy_secret_configured"] is False

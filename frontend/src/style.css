@@ -453,6 +453,14 @@ footer b {
   vertical-align: middle;
 }
 
+.device-table tr {
+  cursor: pointer;
+}
+
+.device-table .selected-row {
+  background: rgb(104 210 173 / 8%);
+}
+
 .device-table tbody tr:last-child td {
   border-bottom: 0;
 }
@@ -480,6 +488,103 @@ footer b {
   width: auto;
   padding-left: 0;
   font-size: 11px;
+}
+
+.guide-layout {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+
+.guide-nav {
+  position: sticky;
+  top: 20px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #2a343e;
+  border-radius: 10px;
+  background: #151d25;
+}
+
+.guide-nav a {
+  padding: 9px 10px;
+  border-radius: 6px;
+  color: #aab5bf;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.guide-nav a:hover,
+.guide-nav a:focus-visible {
+  background: #1e3031;
+  color: #8be2c2;
+  outline: none;
+}
+
+.guide-content {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.guide-card {
+  scroll-margin-top: 20px;
+  padding: 22px 24px;
+  border: 1px solid #2a343e;
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgb(29 39 48 / 80%), rgb(22 30 38 / 80%));
+}
+
+.guide-step {
+  margin: 0 0 8px;
+  color: #70cbb1;
+  font-family: "DM Mono", monospace;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.guide-card h2 {
+  margin: 0 0 10px;
+  color: #e2e8ed;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.guide-card p,
+.guide-card li {
+  color: #aab5bf;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.guide-card p {
+  margin: 8px 0;
+}
+
+.guide-card strong {
+  color: #dce4e9;
+}
+
+.guide-card ul {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  padding-left: 20px;
+}
+
+.guide-card code {
+  color: #8be2c2;
+  font-family: "DM Mono", monospace;
+  font-size: 0.92em;
+}
+
+.guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .row-actions {
@@ -689,6 +794,25 @@ footer b {
   background: linear-gradient(150deg, rgb(29 39 48 / 72%), rgb(21 29 37 / 72%));
 }
 
+.interface-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.interface-charts .chart-card {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+}
+
+.interface-charts h3 {
+  margin: 0 0 8px;
+  color: #b5bec7;
+  font-size: 13px;
+}
+
 .chart-heading {
   display: flex;
   align-items: flex-start;
@@ -813,6 +937,19 @@ footer b {
   .heading-actions {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .guide-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-nav {
+    position: static;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guide-card {
+    padding: 18px;
   }
 
   .chart-heading {

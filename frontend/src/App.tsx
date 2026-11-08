@@ -3,8 +3,9 @@ import CredentialProfiles from "./components/CredentialProfiles";
 import DeviceDetailPage from "./components/DeviceDetail";
 import DeviceForm from "./components/DeviceForm";
 import DeviceList from "./components/DeviceList";
+import UiGuide from "./components/UiGuide";
 
-type Tab = "overview" | "devices" | "credentials";
+type Tab = "overview" | "devices" | "credentials" | "guide";
 
 type DeviceRoute =
   | { view: "list" }
@@ -103,6 +104,12 @@ function App() {
         >
           Credentials
         </button>
+        <button
+          className={`tab ${activeTab === "guide" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("guide")}
+        >
+          Guide
+        </button>
       </nav>
 
       {activeTab === "overview" && (
@@ -192,6 +199,16 @@ function App() {
       )}
       {activeTab === "credentials" && (
         <CredentialProfiles onDevices={showDevices} />
+      )}
+      {activeTab === "guide" && (
+        <UiGuide
+          onDevices={showDevices}
+          onAddDevice={() => {
+            setActiveTab("devices");
+            setRoute({ view: "add" });
+          }}
+          onCredentials={() => setActiveTab("credentials")}
+        />
       )}
 
       <footer>
