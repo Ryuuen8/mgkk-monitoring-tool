@@ -1,25 +1,24 @@
 import { useEffect, useState } from "react";
+import CredentialProfiles from "./components/CredentialProfiles";
+import DeviceDetailPage from "./components/DeviceDetail";
+import DeviceForm from "./components/DeviceForm";
+import DeviceList from "./components/DeviceList";
+
+type Tab = "overview" | "devices" | "credentials";
+
+type DeviceRoute =
+  | { view: "list" }
+  | { view: "add" }
+  | { view: "edit"; id: number }
+  | { view: "detail"; id: number };
 
 type ApiStatus = "checking" | "online" | "offline";
 
-type DeviceStatus = {
-  target: string;
-  type: "http" | "ping";
-  status: "online" | "offline" | "checking";
-  http_status?: number;
-  avg_rtt?: number;
-  packet_loss?: number;
-  checked_at?: string;
-  error?: string;
-};
-
-type Tab = "overview" | "monitoring";
-
 function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const [activeTab, setActiveTab] = useState<Tab>("devices");
+  const [route, setRoute] = useState<DeviceRoute>({ view: "list" });
+  const [refreshToken, setRefreshToken] = useState(0);
   const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
-  const [deviceStatus, setDeviceStatus] = useState<DeviceStatus | null>(null);
-  const [deviceLoading, setDeviceLoading] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -31,7 +30,9 @@ function App() {
         }
         return response.json() as Promise<{ status: string }>;
       })
-      .then((result) => setApiStatus(result.status === "ok" ? "online" : "offline"))
+      .then((result) =>
+        setApiStatus(result.status === "ok" ? "online" : "offline"),
+      )
       .catch((error: unknown) => {
         if (error instanceof Error && error.name === "AbortError") return;
         setApiStatus("offline");
@@ -40,45 +41,20 @@ function App() {
     return () => controller.abort();
   }, []);
 
-  useEffect(() => {
-    if (activeTab !== "monitoring") return;
+  const showDevices = () => {
+    setActiveTab("devices");
+    setRoute({ view: "list" });
+  };
 
-    let cancelled = false;
+  const handleSaved = (id: number) => {
+    setRefreshToken((token) => token + 1);
+    setRoute({ view: "detail", id });
+  };
 
-    const loadDeviceStatus = () => {
-      setDeviceLoading(true);
-      fetch("/api/device-status")
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error(`Device status returned ${response.status}`);
-          }
-          return response.json() as Promise<DeviceStatus>;
-        })
-        .then((result) => {
-          if (!cancelled) setDeviceStatus(result);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setDeviceStatus({
-              target: "unknown",
-              type: "ping",
-              status: "offline",
-            });
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setDeviceLoading(false);
-        });
-    };
-
-    loadDeviceStatus();
-    const interval = window.setInterval(loadDeviceStatus, 10000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, [activeTab]);
+  const handleDeleted = () => {
+    setRefreshToken((token) => token + 1);
+    setRoute({ view: "list" });
+  };
 
   const statusLabel = {
     checking: "Checking",
@@ -86,21 +62,26 @@ function App() {
     offline: "Unavailable",
   }[apiStatus];
 
-  const deviceStatusLabel =
-    deviceStatus?.status === "online"
-      ? "Online"
-      : deviceStatus?.status === "offline"
-        ? "Offline"
-        : "Checking";
-
   return (
     <main className="dashboard">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="MGKK Monitoring home">
+        <a
+          className="brand"
+          href="/"
+          aria-label="MGKK Monitoring home"
+          onClick={(event) => {
+            event.preventDefault();
+            setActiveTab("overview");
+          }}
+        >
           <span className="brand-mark">M</span>
-          <span>MGKK<span className="brand-light"> / MONITOR</span></span>
+          <span>
+            MGKK<span className="brand-light"> / MONITOR</span>
+          </span>
         </a>
-        <span className="environment"><span className="environment-dot" /> SYSTEM OVERVIEW</span>
+        <span className="environment">
+          <span className="environment-dot" /> NETWORK OPERATIONS
+        </span>
       </header>
 
       <nav className="tabs" aria-label="Dashboard tabs">
@@ -111,86 +92,113 @@ function App() {
           Overview
         </button>
         <button
-          className={`tab ${activeTab === "monitoring" ? "tab-active" : ""}`}
-          onClick={() => setActiveTab("monitoring")}
+          className={`tab ${activeTab === "devices" ? "tab-active" : ""}`}
+          onClick={showDevices}
         >
-          Monitoring
+          Devices
+        </button>
+        <button
+          className={`tab ${activeTab === "credentials" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("credentials")}
+        >
+          Credentials
         </button>
       </nav>
 
       {activeTab === "overview" && (
-        <>
-          <section className="intro">
-            <p className="eyebrow">OPERATIONS CENTER <span> / </span> OVERVIEW</p>
+        <section className="page-section">
+          <div className="intro">
+            <p className="eyebrow">
+              OPERATIONS CENTER <span> / </span> OVERVIEW
+            </p>
             <h1>Monitoring, at a glance.</h1>
-            <p className="subtitle">A live view of your monitoring platform services.</p>
-          </section>
+            <p className="subtitle">
+              A live view of your monitoring platform services.
+            </p>
+          </div>
 
-          <section className="service-section" aria-labelledby="services-title">
+          <div className="service-section" aria-labelledby="services-title">
             <div className="section-heading">
               <h2 id="services-title">Core services</h2>
-              <span className="service-count">01 SERVICE</span>
+              <span className="service-count">02 SERVICES</span>
             </div>
+
             <article className="service-card">
-              <div className="service-icon" aria-hidden="true">API</div>
+              <div className="service-icon" aria-hidden="true">
+                API
+              </div>
               <div className="service-info">
                 <h3>Monitoring API</h3>
-                <p>Application health and metrics endpoint</p>
+                <p>Inventory, device status and Prometheus chart data</p>
               </div>
               <div className={`status status-${apiStatus}`}>
                 <span className="status-dot" />
                 {statusLabel}
               </div>
             </article>
-          </section>
-        </>
-      )}
 
-      {activeTab === "monitoring" && (
-        <>
-          <section className="intro">
-            <p className="eyebrow">TEMPORARY TAB <span> / </span> DEVICE CHECK</p>
-            <h1>Monitoring a single device.</h1>
-            <p className="subtitle">Live ping/HTTP status for the configured target.</p>
-          </section>
-
-          <section className="service-section" aria-labelledby="device-title">
-            <div className="section-heading">
-              <h2 id="device-title">Device status</h2>
-              <span className="service-count">01 DEVICE</span>
-            </div>
             <article className="service-card">
               <div className="service-icon" aria-hidden="true">
-                {deviceStatus?.type === "ping" ? "PING" : "HTTP"}
+                POLL
               </div>
               <div className="service-info">
-                <h3>{deviceStatus?.target ?? "Configured target"}</h3>
+                <h3>Device poller</h3>
                 <p>
-                  {deviceLoading
-                    ? "Checking device..."
-                    : deviceStatus?.type === "ping"
-                      ? `Average RTT: ${deviceStatus?.avg_rtt?.toFixed(1) ?? "-"} ms, packet loss: ${((deviceStatus?.packet_loss ?? 0) * 100).toFixed(0)}%`
-                      : deviceStatus?.http_status
-                        ? `HTTP ${deviceStatus.http_status}`
-                        : "No response yet"}
+                  ICMP, SNMPv2c and MikroTik RouterOS HTTPS checks
                 </p>
-                {deviceStatus?.error && <p className="error-text">{deviceStatus.error}</p>}
-                {deviceStatus?.checked_at && (
-                  <p className="checked-at">Last checked: {new Date(deviceStatus.checked_at).toLocaleTimeString()}</p>
-                )}
               </div>
-              <div className={`status status-${deviceStatus?.status ?? "checking"}`}>
-                <span className="status-dot" />
-                {deviceLoading ? "Checking" : deviceStatusLabel}
-              </div>
+              <button className="button" onClick={showDevices}>
+                View devices
+              </button>
             </article>
-          </section>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "devices" && (
+        <>
+          {route.view === "list" && (
+            <DeviceList
+              refreshToken={refreshToken}
+              onAdd={() => setRoute({ view: "add" })}
+              onOpen={(id) => setRoute({ view: "detail", id })}
+              onEdit={(id) => setRoute({ view: "edit", id })}
+              onDeleted={handleDeleted}
+            />
+          )}
+          {route.view === "add" && (
+            <DeviceForm
+              onSaved={handleSaved}
+              onCancel={() => setRoute({ view: "list" })}
+            />
+          )}
+
+          {route.view === "edit" && (
+            <DeviceForm
+              deviceId={route.id}
+              onSaved={handleSaved}
+              onCancel={() => setRoute({ view: "detail", id: route.id })}
+            />
+          )}
+
+          {route.view === "detail" && (
+            <DeviceDetailPage
+              deviceId={route.id}
+              onBack={() => setRoute({ view: "list" })}
+              onEdit={(id) => setRoute({ view: "edit", id })}
+            />
+          )}
         </>
+      )}
+      {activeTab === "credentials" && (
+        <CredentialProfiles onDevices={showDevices} />
       )}
 
       <footer>
         <span>MGKK MONITORING</span>
-        <span>CONNECTED SERVICES <b>01</b></span>
+        <span>
+          CONNECTED SERVICES <b>02</b>
+        </span>
       </footer>
     </main>
   );

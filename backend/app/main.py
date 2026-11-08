@@ -1,14 +1,15 @@
-import os
-from datetime import UTC, datetime
-from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
-
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
-from icmplib import ping  # type: ignore[import-untyped]
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 
+from app.api.routes import credential_profiles, device_groups, devices, sites
+
 app = FastAPI(title="MGKK Monitoring API")
+app.include_router(sites.router, prefix="/api")
+app.include_router(device_groups.router, prefix="/api")
+app.include_router(credential_profiles.router, prefix="/api")
+app.include_router(devices.router, prefix="/api")
+
 http_requests_total = Counter(
     "http_requests_total",
     "Total HTTP requests",
@@ -29,6 +30,7 @@ async def count_http_requests(request: Request, call_next):
 
 
 @app.get("/health")
+@app.get("/api/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     return {"status": "ok"}
 
@@ -36,45 +38,3 @@ async def health() -> dict[str, str]:
 @app.get("/metrics", include_in_schema=False)
 async def metrics() -> Response:
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-@app.get("/device-status")
-def device_status() -> dict:
-    target = os.getenv("POLL_TARGET_URL", "http://api:8000/health")
-    checked_at = datetime.now(UTC).isoformat()
-    if target.startswith(("http://", "https://")):
-        try:
-            with urlopen(target, timeout=10) as response:
-                return {
-                    "target": target,
-                    "type": "http",
-                    "status": "online",
-                    "http_status": response.status,
-                    "checked_at": checked_at,
-                }
-        except (HTTPError, URLError, TimeoutError, OSError) as exc:
-            return {
-                "target": target,
-                "type": "http",
-                "status": "offline",
-                "error": str(exc),
-                "checked_at": checked_at,
-            }
-    try:
-        result = ping(target, count=3, timeout=2)
-        return {
-            "target": target,
-            "type": "ping",
-            "status": "online" if result.is_alive else "offline",
-            "avg_rtt": result.avg_rtt,
-            "packet_loss": result.packet_loss,
-            "checked_at": checked_at,
-        }
-    except (OSError, ValueError, TimeoutError) as exc:
-        return {
-            "target": target,
-            "type": "ping",
-            "status": "offline",
-            "error": str(exc),
-            "checked_at": checked_at,
-        }
