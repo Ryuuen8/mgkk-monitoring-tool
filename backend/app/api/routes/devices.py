@@ -35,6 +35,7 @@ from app.schemas import (
     NetworkInterfaceRead,
     Page,
 )
+from app.services import fingerprint as fingerprint_service
 from app.services import prometheus
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -235,6 +236,18 @@ async def list_device_status(
             )
         )
     return DeviceStatusList(items=items)
+
+
+@router.get("/fingerprint")
+def fingerprint_device(ip: str = Query(..., min_length=1)) -> dict[str, object]:
+    """Probe a host and suggest a device type from its open ports."""
+    result = fingerprint_service.fingerprint(ip)
+    return {
+        "ip": result.ip,
+        "open_ports": result.open_ports,
+        "suggested_device_type": result.suggested_device_type,
+        "reason": result.reason,
+    }
 
 
 @router.get(
