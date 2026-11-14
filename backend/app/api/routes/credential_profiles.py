@@ -24,10 +24,11 @@ router = APIRouter(prefix="/credential-profiles", tags=["credential profiles"])
 
 
 def _default_port(credential_type: CredentialType) -> int:
-    return 161 if credential_type in {
-        CredentialType.SNMP_V2C,
-        CredentialType.SNMP_V3,
-    } else 443
+    if credential_type in {CredentialType.SNMP_V2C, CredentialType.SNMP_V3}:
+        return 161
+    if credential_type is CredentialType.CISCO_SSH:
+        return 22
+    return 443
 
 
 def _validate_profile_fields(
@@ -38,10 +39,14 @@ def _validate_profile_fields(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "SNMP v2c profiles do not use a username",
         )
-    if credential_type == CredentialType.ROUTEROS_API and not username:
+    if credential_type in {
+        CredentialType.ROUTEROS_API,
+        CredentialType.CISCO_RESTCONF,
+        CredentialType.CISCO_SSH,
+    } and not username:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "RouterOS API profiles require a username",
+            "this profile type requires a username",
         )
 
 

@@ -16,6 +16,7 @@ from app.models import (
     CollectorType,
     CredentialProfile,
     CredentialType,
+    Device,
     DeviceCheckType,
     DeviceGroup,
     DeviceType,
@@ -41,6 +42,7 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 DEVICE_NOT_FOUND = "device not found"
 DEVICE_NAME_CONFLICT = "a device with this name already exists"
+DEVICE_MAC_CONFLICT = "a device with this MAC address already exists"
 SITE_NOT_FOUND = "site not found"
 PARENT_NOT_FOUND = "parent device not found"
 SELF_PARENT = "device cannot be its own parent"
@@ -91,6 +93,18 @@ async def _check_site(session: AsyncSession, site_id: int) -> None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, SITE_NOT_FOUND)
 
 
+async def _check_mac(
+    session: AsyncSession, mac: str | None, device_id: int | None = None
+) -> None:
+    if mac is None:
+        return
+    statement = select(Device.id).where(Device.mac == mac)
+    if device_id is not None:
+        statement = statement.where(Device.id != device_id)
+    if await session.scalar(statement) is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, DEVICE_MAC_CONFLICT)
+
+
 async def _check_parent(
     session: AsyncSession, parent_device_id: int, device_id: int | None = None
 ) -> None:
@@ -131,6 +145,9 @@ async def _check_credential_profile(
     if (check_type is DeviceCheckType.SNMP and not is_snmp_profile) or (
         check_type is DeviceCheckType.ROUTEROS_API
         and profile.credential_type is not CredentialType.ROUTEROS_API
+    ) or (
+        check_type is DeviceCheckType.RESTCONF
+        and profile.credential_type is not CredentialType.CISCO_RESTCONF
     ):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -146,6 +163,14 @@ def _check_collector(check_type: DeviceCheckType, collector: CollectorType) -> N
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "RouterOS API checks require the MikroTik collector",
+        )
+    if (
+        check_type is DeviceCheckType.RESTCONF
+        and collector is not CollectorType.CISCO
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "RESTCONF checks require the Cisco collector",
         )
 
 
@@ -327,6 +352,9 @@ async def get_interface_metrics(
         "out_errors_per_second": (
             f"rate(interface_out_errors_total{{{selector}}}[{rate_window}s])"
         ),
+        "crc_errors_per_second": (
+            f"rate(interface_crc_errors_total{{{selector}}}[{rate_window}s])"
+        ),
         "in_discards_per_second": (
             f"rate(interface_in_discards_total{{{selector}}}[{rate_window}s])"
         ),
@@ -335,6 +363,12 @@ async def get_interface_metrics(
         ),
         "in_utilization": f"interface_in_link_utilization_ratio{{{selector}}}",
         "out_utilization": f"interface_out_link_utilization_ratio{{{selector}}}",
+        "in_utilization_percent": (
+            f"interface_in_utilization_percent{{{selector}}}"
+        ),
+        "out_utilization_percent": (
+            f"interface_out_utilization_percent{{{selector}}}"
+        ),
     }
     try:
         result = {
@@ -455,6 +489,7 @@ async def create_device(
         session, payload.check_type, payload.credential_profile_id
     )
     _check_collector(payload.check_type, payload.collector)
+    await _check_mac(session, payload.mac)
     if payload.parent_device_id is not None:
         await _check_parent(session, payload.parent_device_id)
     groups = await _resolve_groups(session, payload.group_ids)
@@ -497,6 +532,8 @@ async def update_device(
         changes.get("check_type", device.check_type),
         changes.get("collector", device.collector),
     )
+    if "mac" in changes:
+        await _check_mac(session, changes["mac"], device.id)
     groups = await _resolve_groups(session, changes.get("group_ids") or [])
 
     try:
