@@ -16,6 +16,11 @@ class NetworkInterfaceRead(Timestamps):
     oper_status: int | None
     link_speed_mbps: int | None
     link_speed_override_mbps: int | None
+    last_in_errors: int | None = None
+    last_out_errors: int | None = None
+    last_crc_errors: int | None = None
+    last_in_discards: int | None = None
+    last_out_discards: int | None = None
     last_polled_at: datetime | None
 
 
@@ -32,7 +37,10 @@ class InterfaceMetrics(BaseModel):
     out_bits_per_second: list[MetricPoint]
     in_errors_per_second: list[MetricPoint]
     out_errors_per_second: list[MetricPoint]
+    crc_errors_per_second: list[MetricPoint]
     in_discards_per_second: list[MetricPoint]
     out_discards_per_second: list[MetricPoint]
+    in_utilization_percent: list[MetricPoint]
+    out_utilization_percent: list[MetricPoint]
     in_utilization: list[MetricPoint]
     out_utilization: list[MetricPoint]

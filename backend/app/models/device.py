@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
@@ -12,6 +13,8 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
+    Uuid,
     text,
 )
 from sqlalchemy.dialects.postgresql import INET, JSONB, MACADDR
@@ -33,9 +36,10 @@ class Device(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("parent_device_id <> id", name="no_self_parent"),
         CheckConstraint("poll_interval_seconds >= 10", name="min_poll_interval"),
+        UniqueConstraint("mac", name="uq_devices_mac"),
         CheckConstraint(
             "(check_type = 'ping_only' AND credential_profile_id IS NULL) OR "
-            "(check_type IN ('snmp', 'routeros_api') AND "
+            "(check_type IN ('snmp', 'routeros_api', 'restconf') AND "
             "credential_profile_id IS NOT NULL)",
             name="check_credentials",
         ),
@@ -43,6 +47,14 @@ class Device(TimestampMixin, Base):
 
     # Identity is the row id, never the IP: DHCP and re-addressing happen.
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # Stable UUID API identity; the integer key remains for legacy foreign keys.
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+        unique=True,
+        nullable=False,
+    )
     site_id: Mapped[int] = mapped_column(
         ForeignKey("sites.id", ondelete="RESTRICT"), index=True
     )
@@ -52,7 +64,7 @@ class Device(TimestampMixin, Base):
 
     # Address the pollers use. Indexed but not unique.
     mgmt_ip: Mapped[str] = mapped_column(INET, index=True)
-    mac: Mapped[str | None] = mapped_column(MACADDR, index=True)
+    mac: Mapped[str | None] = mapped_column(MACADDR)
 
     # Stored as a VARCHAR + CHECK rather than a native PostgreSQL enum, so adding
     # a new device type later is a simple migration (no ALTER TYPE).
@@ -125,6 +137,9 @@ class Device(TimestampMixin, Base):
     disk_used_bytes: Mapped[int | None] = mapped_column(BigInteger)
     temperature_celsius: Mapped[float | None] = mapped_column(Float)
     voltage_volts: Mapped[float | None] = mapped_column(Float)
+    fan_speed_rpm: Mapped[float | None] = mapped_column(Float)
+    fans_ok: Mapped[bool | None] = mapped_column(Boolean)
+    power_supplies_ok: Mapped[bool | None] = mapped_column(Boolean)
     dhcp_lease_count: Mapped[int | None] = mapped_column(Integer)
     arp_entry_count: Mapped[int | None] = mapped_column(Integer)
 

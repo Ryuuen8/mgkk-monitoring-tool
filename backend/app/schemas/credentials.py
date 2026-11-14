@@ -49,7 +49,10 @@ class CredentialProfileCreate(BaseModel):
             ):
                 raise ValueError("AES-128 privacy requires a privacy secret")
         elif not self.username:
-            raise ValueError("RouterOS API profiles require a username")
+            raise ValueError(
+                "RouterOS API, Cisco RESTCONF, and Cisco SSH profiles "
+                "require a username"
+            )
         elif (
             self.auth_protocol is not None
             or self.privacy_protocol is not None

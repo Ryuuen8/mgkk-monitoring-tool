@@ -8,16 +8,17 @@ class CredentialConfigurationError(RuntimeError):
 
 
 def _fernet() -> Fernet:
-    key = os.getenv("CREDENTIAL_ENCRYPTION_KEY")
+    key = os.getenv("ENCRYPTION_KEY") or os.getenv("CREDENTIAL_ENCRYPTION_KEY")
     if not key:
         raise CredentialConfigurationError(
-            "CREDENTIAL_ENCRYPTION_KEY must be configured to use credentials"
+            "ENCRYPTION_KEY must be configured to use credentials "
+            "(CREDENTIAL_ENCRYPTION_KEY is supported for compatibility)"
         )
     try:
         return Fernet(key.encode("ascii"))
     except (ValueError, UnicodeEncodeError) as exc:
         raise CredentialConfigurationError(
-            "CREDENTIAL_ENCRYPTION_KEY is not a valid Fernet key"
+            "ENCRYPTION_KEY is not a valid Fernet key"
         ) from exc
 
 

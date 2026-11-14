@@ -45,6 +45,7 @@ class NetworkInterface(TimestampMixin, Base):
     last_out_octets: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
     last_in_errors: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
     last_out_errors: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
+    last_crc_errors: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
     last_in_discards: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
     last_out_discards: Mapped[Decimal | None] = mapped_column(Numeric(20, 0))
     last_polled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

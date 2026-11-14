@@ -23,6 +23,8 @@ class CredentialType(str, enum.Enum):
     SNMP_V2C = "snmp_v2c"
     SNMP_V3 = "snmp_v3"
     ROUTEROS_API = "routeros_api"
+    CISCO_RESTCONF = "cisco_restconf"
+    CISCO_SSH = "cisco_ssh"
 
 
 class SnmpAuthProtocol(str, enum.Enum):
@@ -45,7 +47,8 @@ class CredentialProfile(TimestampMixin, Base):
             "(credential_type = 'snmp_v3' AND username IS NOT NULL AND "
             "auth_protocol IN ('sha', 'sha256') AND "
             "privacy_protocol IN ('none', 'aes128')) OR "
-            "(credential_type = 'routeros_api' AND username IS NOT NULL AND "
+            "(credential_type IN ('routeros_api', 'cisco_restconf', 'cisco_ssh') "
+            "AND username IS NOT NULL AND "
             "auth_protocol IS NULL AND privacy_protocol IS NULL)",
             name="valid_username",
         ),

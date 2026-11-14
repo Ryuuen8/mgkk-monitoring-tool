@@ -57,6 +57,11 @@ class DeviceBase(BaseModel):
     def _check_mac(cls, v: str | None) -> str | None:
         return normalize_mac(v)
 
+    @field_validator("collector", mode="before")
+    @classmethod
+    def _legacy_generic_collector(cls, value: object) -> object:
+        return "generic_snmp" if value == "generic" else value
+
     @field_validator("vendor")
     @classmethod
     def _lower_vendor(cls, v: str | None) -> str | None:
@@ -100,6 +105,11 @@ class DeviceUpdate(BaseModel):
     @classmethod
     def _check_mac(cls, v: str | None) -> str | None:
         return normalize_mac(v)
+
+    @field_validator("collector", mode="before")
+    @classmethod
+    def _legacy_generic_collector(cls, value: object) -> object:
+        return "generic_snmp" if value == "generic" else value
 
     @field_validator("vendor")
     @classmethod
