@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -23,7 +24,9 @@ def timeout() -> float:
     return float(os.getenv("PROMETHEUS_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT)))
 
 
-async def _get(path: str, params: dict[str, str | float]) -> list[dict]:
+async def _get(
+    path: str, params: dict[str, str | float]
+) -> list[dict[str, Any]]:
     url = f"{base_url()}{path}"
     try:
         async with httpx.AsyncClient(timeout=timeout()) as client:
@@ -42,7 +45,7 @@ async def _get(path: str, params: dict[str, str | float]) -> list[dict]:
     return result
 
 
-async def query(expression: str) -> list[dict]:
+async def query(expression: str) -> list[dict[str, Any]]:
     """Run an instant query and return its result vector."""
     return await _get("/api/v1/query", {"query": expression})
 
@@ -53,7 +56,7 @@ async def query_range(
     start: datetime,
     end: datetime,
     step_seconds: int,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Run a range query and return its result matrix."""
     return await _get(
         "/api/v1/query_range",

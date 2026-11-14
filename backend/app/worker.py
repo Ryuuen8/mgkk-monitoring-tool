@@ -25,12 +25,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from app.collectors import get_collector
+from app.collectors.base import NeighborData
+from app.collectors.generic_snmp import GenericSNMPCollector
 from app.db.session import SessionLocal
 from app.models import (
     CollectorType,
     CredentialType,
     Device,
     DeviceCheckType,
+    DeviceNeighbor,
+    DeviceSnapshot,
     NetworkInterface,
 )
 from app.models.credentials import SnmpAuthProtocol, SnmpPrivacyProtocol
@@ -48,6 +52,16 @@ logger = logging.getLogger(__name__)
 DEVICE_UP = Gauge(
     "device_up",
     "1 when the last configured device check succeeded, else 0",
+    ("device", "site"),
+)
+DEVICE_LATENCY_MS = Gauge(
+    "device_latency_ms",
+    "Average ICMP round-trip time in milliseconds",
+    ("device", "site"),
+)
+PACKET_LOSS_PERCENT = Gauge(
+    "packet_loss_percent",
+    "ICMP packet loss percentage (0-100)",
     ("device", "site"),
 )
 PING_LATENCY = Gauge(
@@ -90,6 +104,31 @@ INTERFACE_OUT_DISCARDS = Counter(
     "Total outbound interface discards observed by the poller",
     ("device", "interface", "site"),
 )
+INTERFACE_CRC_ERRORS = Counter(
+    "interface_crc_errors_total",
+    "Total Ethernet CRC/FCS errors observed by the poller",
+    ("device", "interface", "site"),
+)
+INTERFACE_ADMIN_STATUS = Gauge(
+    "interface_admin_status",
+    "IF-MIB administrative status enum value",
+    ("device", "interface", "site"),
+)
+INTERFACE_OPER_STATUS = Gauge(
+    "interface_oper_status",
+    "IF-MIB operational status enum value",
+    ("device", "interface", "site"),
+)
+INTERFACE_SPEED = Gauge(
+    "interface_speed_mbps",
+    "Reported interface link speed in megabits per second",
+    ("device", "interface", "site"),
+)
+INTERFACE_EFFECTIVE_SPEED = Gauge(
+    "interface_effective_speed_mbps",
+    "Effective interface speed after applying any manual override",
+    ("device", "interface", "site"),
+)
 INTERFACE_IN_LINK_UTILIZATION = Gauge(
     "interface_in_link_utilization_ratio",
     "Inbound interface traffic as a fraction of configured link speed",
@@ -99,6 +138,26 @@ INTERFACE_OUT_LINK_UTILIZATION = Gauge(
     "interface_out_link_utilization_ratio",
     "Outbound interface traffic as a fraction of configured link speed",
     ("device", "interface", "site"),
+)
+INTERFACE_IN_UTILIZATION_PERCENT = Gauge(
+    "interface_in_utilization_percent",
+    "Inbound interface utilization percentage",
+    ("device", "interface", "site"),
+)
+INTERFACE_OUT_UTILIZATION_PERCENT = Gauge(
+    "interface_out_utilization_percent",
+    "Outbound interface utilization percentage",
+    ("device", "interface", "site"),
+)
+DEVICE_UPTIME = Gauge(
+    "device_uptime_seconds",
+    "System uptime in seconds",
+    ("device", "site"),
+)
+DEVICE_MEMORY_TOTAL = Gauge(
+    "device_memory_total_bytes",
+    "Total device memory in bytes",
+    ("device", "site"),
 )
 DEVICE_CPU_USAGE = Gauge(
     "device_cpu_usage_percent",
@@ -125,6 +184,21 @@ DEVICE_VOLTAGE = Gauge(
     "Device voltage in volts",
     ("device", "site"),
 )
+DEVICE_FAN_SPEED = Gauge(
+    "device_fan_speed_rpm",
+    "Lowest reported fan speed in revolutions per minute",
+    ("device", "site"),
+)
+DEVICE_FANS_OK = Gauge(
+    "device_fans_ok",
+    "1 when all reported fans are normal, 0 when any is not, -1 when unavailable",
+    ("device", "site"),
+)
+DEVICE_POWER_SUPPLIES_OK = Gauge(
+    "device_power_supplies_ok",
+    "1 when all reported power supplies are normal, 0 when any is not, -1 when unavailable",
+    ("device", "site"),
+)
 MIKROTIK_DHCP_LEASES = Gauge(
     "mikrotik_dhcp_lease_count",
     "Number of DHCP leases",
@@ -144,6 +218,11 @@ MIKROTIK_WIRELESS_SIGNAL_DBM = Gauge(
     "mikrotik_wireless_signal_strength_dbm",
     "Average wireless client signal strength in dBm",
     ("device", "interface", "site"),
+)
+DEVICE_NEIGHBOR_COUNT = Gauge(
+    "device_neighbor_count",
+    "Number of discovered topology adjacencies on the device",
+    ("device", "site"),
 )
 
 # NaN marks "no latency sample" so range queries can leave a gap instead of
@@ -165,7 +244,7 @@ Pinger = Callable[[str], Awaitable[PingResult]]
 
 async def icmp_ping(address: str) -> PingResult:
     """Ping an address three times with icmplib."""
-    from icmplib import async_ping  # type: ignore[import-untyped]
+    from icmplib import async_ping
 
     result = await async_ping(address, count=3, timeout=2)
     return PingResult(
@@ -177,7 +256,7 @@ async def icmp_ping(address: str) -> PingResult:
 
 async def snmp_check(address: str, port: int, community: str) -> PingResult:
     """Check SNMPv2c availability by reading sysUpTime."""
-    import pysnmp.hlapi.v3arch.asyncio as hlapi  # type: ignore[import-untyped]
+    import pysnmp.hlapi.v3arch.asyncio as hlapi
 
     engine = hlapi.SnmpEngine()
     started = time.perf_counter()
@@ -204,7 +283,7 @@ async def snmp_check(address: str, port: int, community: str) -> PingResult:
 
 
 async def _snmp_profile_check(device: Device) -> PingResult:
-    import pysnmp.hlapi.v3arch.asyncio as hlapi  # type: ignore[import-untyped]
+    import pysnmp.hlapi.v3arch.asyncio as hlapi
 
     profile = device.credential_profile
     if profile is None:
@@ -234,7 +313,7 @@ async def _snmp_profile_check(device: Device) -> PingResult:
 
 
 def _snmp_auth(profile: Any) -> Any:
-    import pysnmp.hlapi.v3arch.asyncio as hlapi  # type: ignore[import-untyped]
+    import pysnmp.hlapi.v3arch.asyncio as hlapi
 
     if profile.credential_type == CredentialType.SNMP_V2C:
         return hlapi.CommunityData(decrypt_secret(profile.secret_ciphertext), mpModel=1)
@@ -267,7 +346,7 @@ def _snmp_auth(profile: Any) -> Any:
 async def _snmp_get(
     engine: Any, auth: Any, target: Any, oids: list[str]
 ) -> dict[str, Any]:
-    import pysnmp.hlapi.v3arch.asyncio as hlapi  # type: ignore[import-untyped]
+    import pysnmp.hlapi.v3arch.asyncio as hlapi
 
     indication, error_status, _, var_binds = await hlapi.get_cmd(
         engine,
@@ -282,7 +361,7 @@ async def _snmp_get(
 
 
 async def _snmp_walk(engine: Any, auth: Any, target: Any, base_oid: str) -> dict[int, Any]:
-    import pysnmp.hlapi.v3arch.asyncio as hlapi  # type: ignore[import-untyped]
+    import pysnmp.hlapi.v3arch.asyncio as hlapi
 
     values: dict[int, Any] = {}
     async for indication, error_status, _, var_binds in hlapi.walk_cmd(
@@ -419,72 +498,30 @@ def _remove_interface_metrics(device: Device, interface_name: str) -> None:
         INTERFACE_OUT_ERRORS,
         INTERFACE_IN_DISCARDS,
         INTERFACE_OUT_DISCARDS,
+        INTERFACE_CRC_ERRORS,
+        INTERFACE_ADMIN_STATUS,
+        INTERFACE_OPER_STATUS,
+        INTERFACE_SPEED,
+        INTERFACE_EFFECTIVE_SPEED,
         INTERFACE_IN_LINK_UTILIZATION,
         INTERFACE_OUT_LINK_UTILIZATION,
+        INTERFACE_IN_UTILIZATION_PERCENT,
+        INTERFACE_OUT_UTILIZATION_PERCENT,
     ):
         metric.remove(*labels)
 
 
 async def poll_snmp_telemetry(device: Device) -> dict[int, dict[str, Any]]:
-    """Read system, interface, and resource data with SNMP."""
-    import pysnmp.hlapi.v3arch.asyncio as hlapi  # type: ignore[import-untyped]
-
-    profile = device.credential_profile
-    if profile is None:
-        raise RuntimeError("SNMP device has no credential profile")
-    engine = hlapi.SnmpEngine()
-    try:
-        target = await hlapi.UdpTransportTarget.create(
-            (str(device.mgmt_ip), profile.port), timeout=2, retries=0
-        )
-        auth = _snmp_auth(profile)
-        system_oids = [
-            "1.3.6.1.2.1.1.1.0",  # sysDescr
-            "1.3.6.1.2.1.1.3.0",  # sysUpTime
-            "1.3.6.1.2.1.1.5.0",  # sysName
-        ]
-        system = await _snmp_get(engine, auth, target, system_oids)
-        device.snmp_system_description = str(system["1.3.6.1.2.1.1.1.0"])
-        device.snmp_system_name = str(system["1.3.6.1.2.1.1.5.0"])
-        ticks = _snmp_int(system["1.3.6.1.2.1.1.3.0"])
-        device.uptime_seconds = ticks // 100 if ticks is not None else None
-        if device.collector is CollectorType.MIKROTIK:
-            await _poll_mikrotik_snmp_resources(engine, auth, target, device)
-        else:
-            (
-                device.cpu_usage_percent,
-                device.memory_total_bytes,
-                device.memory_used_bytes,
-            ) = await _poll_host_resources(engine, auth, target, device.name)
-
-        columns = {
-            "name": "1.3.6.1.2.1.31.1.1.1.1",
-            "description": "1.3.6.1.2.1.2.2.1.2",
-            "alias": "1.3.6.1.2.1.31.1.1.1.18",
-            "speed": "1.3.6.1.2.1.31.1.1.1.15",
-            "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
-            "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
-            "in_errors": "1.3.6.1.2.1.2.2.1.14",
-            "out_errors": "1.3.6.1.2.1.2.2.1.20",
-            "in_discards": "1.3.6.1.2.1.2.2.1.13",
-            "out_discards": "1.3.6.1.2.1.2.2.1.19",
-            "admin": "1.3.6.1.2.1.2.2.1.7",
-            "oper": "1.3.6.1.2.1.2.2.1.8",
-        }
-        walks = {
-            name: await _snmp_walk(engine, auth, target, oid)
-            for name, oid in columns.items()
-        }
-        return {
-            index: {
-                **{name: table.get(index) for name, table in walks.items()},
-                "name": walks["name"].get(index)
-                or walks["description"].get(index),
-            }
-            for index in set(walks["name"]) | set(walks["description"])
-        }
-    finally:
-        engine.close_dispatcher()
+    """Compatibility wrapper around the generic collector's typed MIB polls."""
+    result = await GenericSNMPCollector().collect(device)
+    if result.system is not None:
+        device.snmp_system_description = result.system.description
+        device.snmp_system_name = result.system.name
+        device.uptime_seconds = result.system.uptime_seconds
+    if result.health is not None:
+        for field in result.health.model_fields:
+            setattr(device, field, getattr(result.health, field))
+    return result.interfaces
 
 
 async def _poll_mikrotik_snmp_resources(
@@ -579,6 +616,7 @@ async def save_interface_telemetry(
         "out_errors": INTERFACE_OUT_ERRORS,
         "in_discards": INTERFACE_IN_DISCARDS,
         "out_discards": INTERFACE_OUT_DISCARDS,
+        "crc_errors": INTERFACE_CRC_ERRORS,
     }
     for if_index, data in interfaces.items():
         name = str(data["name"])
@@ -598,6 +636,16 @@ async def save_interface_telemetry(
         row.oper_status = _snmp_int(data.get("oper"))
         speed = _snmp_int(data.get("speed"))
         row.link_speed_mbps = speed if speed and speed > 0 else None
+        interface_labels = (device.name, row.name, device.site.code)
+        INTERFACE_ADMIN_STATUS.labels(*interface_labels).set(
+            row.admin_status if row.admin_status is not None else NO_SAMPLE
+        )
+        INTERFACE_OPER_STATUS.labels(*interface_labels).set(
+            row.oper_status if row.oper_status is not None else NO_SAMPLE
+        )
+        INTERFACE_SPEED.labels(*interface_labels).set(
+            row.link_speed_mbps if row.link_speed_mbps is not None else NO_SAMPLE
+        )
         elapsed = (
             (now - row.last_polled_at).total_seconds()
             if row.last_polled_at is not None
@@ -619,34 +667,134 @@ async def save_interface_telemetry(
             setattr(row, f"last_{field}", value)
 
         effective_speed = row.link_speed_override_mbps or row.link_speed_mbps
+        INTERFACE_EFFECTIVE_SPEED.labels(*interface_labels).set(
+            effective_speed if effective_speed is not None else NO_SAMPLE
+        )
         if effective_speed and elapsed > 0:
-            INTERFACE_IN_LINK_UTILIZATION.labels(
-                device.name, row.name, device.site.code
-            ).set(
-                deltas.get("in_octets", 0) * 8
+            in_utilization = (
+                deltas.get("in_octets", 0)
+                * 8
                 / elapsed
                 / (effective_speed * 1_000_000)
             )
-            INTERFACE_OUT_LINK_UTILIZATION.labels(
-                device.name, row.name, device.site.code
-            ).set(
-                deltas.get("out_octets", 0) * 8
+            out_utilization = (
+                deltas.get("out_octets", 0)
+                * 8
                 / elapsed
                 / (effective_speed * 1_000_000)
+            )
+            INTERFACE_IN_LINK_UTILIZATION.labels(
+                *interface_labels
+            ).set(in_utilization)
+            INTERFACE_OUT_LINK_UTILIZATION.labels(
+                *interface_labels
+            ).set(out_utilization)
+            INTERFACE_IN_UTILIZATION_PERCENT.labels(*interface_labels).set(
+                in_utilization * 100
+            )
+            INTERFACE_OUT_UTILIZATION_PERCENT.labels(*interface_labels).set(
+                out_utilization * 100
             )
         else:
-            INTERFACE_IN_LINK_UTILIZATION.labels(
-                device.name, row.name, device.site.code
-            ).set(NO_SAMPLE)
-            INTERFACE_OUT_LINK_UTILIZATION.labels(
-                device.name, row.name, device.site.code
-            ).set(NO_SAMPLE)
+            INTERFACE_IN_LINK_UTILIZATION.labels(*interface_labels).set(NO_SAMPLE)
+            INTERFACE_OUT_LINK_UTILIZATION.labels(*interface_labels).set(NO_SAMPLE)
+            INTERFACE_IN_UTILIZATION_PERCENT.labels(*interface_labels).set(NO_SAMPLE)
+            INTERFACE_OUT_UTILIZATION_PERCENT.labels(*interface_labels).set(NO_SAMPLE)
         row.last_polled_at = now
     for if_index, row in existing.items():
         if if_index not in interfaces:
             _remove_interface_metrics(device, row.name)
             await session.delete(row)
     await session.commit()
+
+
+async def save_device_snapshots(
+    session: AsyncSession,
+    device: Device,
+    snapshots: dict[str, list[dict[str, Any]]],
+) -> None:
+    now = datetime.now(UTC)
+    for snapshot_type, payload in snapshots.items():
+        row = await session.scalar(
+            select(DeviceSnapshot).where(
+                DeviceSnapshot.device_id == device.id,
+                DeviceSnapshot.snapshot_type == snapshot_type,
+            )
+        )
+        if row is None:
+            row = DeviceSnapshot(
+                device_id=device.id,
+                snapshot_type=snapshot_type,
+                payload=payload,
+                captured_at=now,
+            )
+            session.add(row)
+        else:
+            row.payload = payload
+            row.captured_at = now
+
+
+async def save_routeros_snapshots(
+    session: AsyncSession,
+    device: Device,
+    snapshots: dict[str, list[dict[str, Any]]],
+) -> None:
+    """Backward-compatible wrapper for the generalised snapshot saver."""
+    await save_device_snapshots(session, device, snapshots)
+
+
+async def save_neighbors(
+    session: AsyncSession,
+    device: Device,
+    neighbors: list[NeighborData],
+) -> None:
+    """Upsert discovered adjacencies and drop stale entries."""
+    now = datetime.now(UTC)
+    existing_rows = await session.scalars(
+        select(DeviceNeighbor).where(DeviceNeighbor.device_id == device.id)
+    )
+    existing = {
+        (
+            row.protocol,
+            row.local_interface,
+            row.remote_device or "",
+            row.remote_interface or "",
+        ): row
+        for row in existing_rows
+    }
+    seen: set[tuple[str, str, str, str]] = set()
+    for neighbor in neighbors:
+        key = (
+            neighbor.protocol,
+            neighbor.local_interface,
+            neighbor.remote_device or "",
+            neighbor.remote_interface or "",
+        )
+        seen.add(key)
+        row = existing.get(key)
+        if row is None:
+            row = DeviceNeighbor(
+                device_id=device.id,
+                protocol=neighbor.protocol,
+                local_interface=neighbor.local_interface,
+                remote_device=neighbor.remote_device,
+                remote_interface=neighbor.remote_interface,
+                remote_platform=neighbor.remote_platform,
+                remote_address=neighbor.remote_address,
+                capabilities=neighbor.capabilities,
+                first_seen_at=now,
+                last_seen_at=now,
+            )
+            session.add(row)
+        else:
+            row.remote_platform = neighbor.remote_platform
+            row.remote_address = neighbor.remote_address
+            row.capabilities = neighbor.capabilities
+            row.last_seen_at = now
+    for existing_key, row in existing.items():
+        if existing_key not in seen:
+            await session.delete(row)
+
 
 async def routeros_api_check(
     address: str,
@@ -672,6 +820,14 @@ async def routeros_api_check(
         avg_rtt=time.perf_counter() - started,
         packet_loss=0.0,
     )
+
+
+async def restconf_check(device: Device) -> PingResult:
+    """Check Cisco IOS-XE RESTCONF availability."""
+    from app.collectors.cisco.restconf import probe_restconf
+
+    elapsed = await probe_restconf(device)
+    return PingResult(is_alive=True, avg_rtt=elapsed, packet_loss=0.0)
 
 
 async def configured_check(device: Device) -> PingResult:
@@ -701,6 +857,11 @@ async def configured_check(device: Device) -> PingResult:
             secret,
             verify_tls=profile.verify_tls,
         )
+    if (
+        device.check_type == DeviceCheckType.RESTCONF
+        and profile.credential_type is CredentialType.CISCO_RESTCONF
+    ):
+        return await restconf_check(device)
     raise RuntimeError("credential profile type does not match device check type")
 
 
@@ -725,9 +886,17 @@ def _publish(device: Device, result: PingResult) -> None:
         latency = result.avg_rtt if math.isfinite(result.avg_rtt) else NO_SAMPLE
         PING_LATENCY.labels(device.name, site_code).set(latency)
         PING_PACKET_LOSS.labels(device.name, site_code).set(result.packet_loss)
+        DEVICE_LATENCY_MS.labels(device.name, site_code).set(
+            latency * 1000 if math.isfinite(latency) else NO_SAMPLE
+        )
+        PACKET_LOSS_PERCENT.labels(device.name, site_code).set(
+            result.packet_loss * 100
+        )
     else:
         PING_LATENCY.labels(device.name, site_code).set(NO_SAMPLE)
         PING_PACKET_LOSS.labels(device.name, site_code).set(1.0)
+        DEVICE_LATENCY_MS.labels(device.name, site_code).set(NO_SAMPLE)
+        PACKET_LOSS_PERCENT.labels(device.name, site_code).set(100)
 
 
 async def poll_device(
@@ -759,10 +928,25 @@ async def poll_device(
         if device.check_type != DeviceCheckType.PING_ONLY:
             try:
                 collected = await get_collector(device.collector).collect(device)
+                if collected.system is not None:
+                    device.snmp_system_name = collected.system.name
+                    device.snmp_system_description = collected.system.description
+                    device.uptime_seconds = collected.system.uptime_seconds
+                if collected.health is not None:
+                    for field in collected.health.model_fields:
+                        setattr(device, field, getattr(collected.health, field))
+                if collected.snapshots:
+                    await save_device_snapshots(
+                        session, device, collected.snapshots
+                    )
                 if collected.interfaces:
                     await save_interface_telemetry(
                         session, device, collected.interfaces
                     )
+                await save_neighbors(session, device, collected.neighbors)
+                DEVICE_NEIGHBOR_COUNT.labels(
+                    device.name, device.site.code
+                ).set(len(collected.neighbors))
                 DEVICE_CPU_USAGE.labels(device.name, device.site.code).set(
                     device.cpu_usage_percent
                     if device.cpu_usage_percent is not None
@@ -771,6 +955,16 @@ async def poll_device(
                 DEVICE_MEMORY_USAGE.labels(device.name, device.site.code).set(
                     device.memory_used_bytes
                     if device.memory_used_bytes is not None
+                    else NO_SAMPLE
+                )
+                DEVICE_MEMORY_TOTAL.labels(device.name, device.site.code).set(
+                    device.memory_total_bytes
+                    if device.memory_total_bytes is not None
+                    else NO_SAMPLE
+                )
+                DEVICE_UPTIME.labels(device.name, device.site.code).set(
+                    device.uptime_seconds
+                    if device.uptime_seconds is not None
                     else NO_SAMPLE
                 )
                 DEVICE_DISK_USAGE.labels(device.name, device.site.code).set(
@@ -786,6 +980,23 @@ async def poll_device(
                 DEVICE_VOLTAGE.labels(device.name, device.site.code).set(
                     device.voltage_volts
                     if device.voltage_volts is not None
+                    else NO_SAMPLE
+                )
+                DEVICE_FAN_SPEED.labels(device.name, device.site.code).set(
+                    device.fan_speed_rpm
+                    if device.fan_speed_rpm is not None
+                    else NO_SAMPLE
+                )
+                DEVICE_FANS_OK.labels(device.name, device.site.code).set(
+                    int(device.fans_ok)
+                    if device.fans_ok is not None
+                    else NO_SAMPLE
+                )
+                DEVICE_POWER_SUPPLIES_OK.labels(
+                    device.name, device.site.code
+                ).set(
+                    int(device.power_supplies_ok)
+                    if device.power_supplies_ok is not None
                     else NO_SAMPLE
                 )
                 if device.collector is CollectorType.MIKROTIK:
