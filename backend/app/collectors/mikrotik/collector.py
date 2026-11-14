@@ -7,8 +7,19 @@ import time
 from typing import Any, Self
 
 import httpx
+from librouteros import async_connect
+from librouteros.api import AsyncApi
+from librouteros.exceptions import LibRouterosError
 
-from app.collectors.base import CollectionResult
+from app.collectors.base import (
+    BaseCollector,
+    CollectionResult,
+    HealthData,
+    InterfaceData,
+    NeighborData,
+    SystemInfo,
+)
+from app.collectors.generic_snmp import GenericSNMPCollector
 from app.models import Device, DeviceCheckType
 from app.services.credentials import decrypt_secret
 
@@ -16,6 +27,7 @@ logger = logging.getLogger(__name__)
 _UPTIME_PART = re.compile(r"(\d+)([wdhms])")
 _SPEED = re.compile(r"([\d.]+)\s*(bps|kbps|mbps|gbps|tbps)", re.IGNORECASE)
 _NUMBER = re.compile(r"-?[\d.]+")
+_VERSION = re.compile(r"(\d+)\.(\d+)")
 _WIRELESS_SERIES: dict[tuple[str, str], set[str]] = {}
 
 
@@ -103,6 +115,51 @@ def _wireless_summary(
     }
 
 
+def _routeros_neighbors(rows: list[dict[str, Any]]) -> list[NeighborData]:
+    """Normalise RouterOS ``ip/neighbor`` rows without leaking client data."""
+    neighbors: dict[tuple[str, str, str], NeighborData] = {}
+    for item in rows:
+        interface = item.get("interface")
+        if not interface:
+            continue
+        address = item.get("address")
+        identity = item.get("identity") or item.get("sys-name")
+        mac = item.get("mac-address")
+        platform = (
+            item.get("platform")
+            or item.get("board")
+            or item.get("version")
+        )
+        neighbor = NeighborData(
+            protocol="routeros",
+            local_interface=str(interface)[:255],
+            remote_device=(
+                str(identity)[:255]
+                if identity
+                else (str(address) if address else None)
+            ),
+            remote_interface=None,
+            remote_platform=str(platform)[:255] if platform else None,
+            remote_address=str(address or mac) if (address or mac) else None,
+            capabilities=(
+                str(item["system-caps"]) if item.get("system-caps") else None
+            ),
+        )
+        key = (
+            neighbor.local_interface,
+            neighbor.remote_device or "",
+            neighbor.remote_device or "",
+        )
+        neighbors[key] = neighbor
+    return sorted(
+        neighbors.values(),
+        key=lambda item: (
+            item.local_interface,
+            item.remote_device or "",
+        ),
+    )
+
+
 def _resource_fields(device: Device, resource: dict[str, Any]) -> None:
     device.snmp_system_name = str(resource.get("board-name") or device.name)[:255]
     device.snmp_system_description = " ".join(
@@ -143,6 +200,67 @@ def _credential(device: Device) -> tuple[str, str, int, bool]:
         profile.port,
         profile.verify_tls,
     )
+
+
+def _version_tuple(value: str | None) -> tuple[int, int] | None:
+    match = _VERSION.search(value or "")
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+async def _connect_binary_credentials(
+    address: str,
+    port: int,
+    username: str,
+    password: str,
+    verify_tls: bool,
+    os_version: str | None = None,
+) -> AsyncApi:
+    tls = None
+    if port == 8729:
+        tls = ssl.create_default_context()
+        if not verify_tls:
+            tls.check_hostname = False
+            tls.verify_mode = ssl.CERT_NONE
+    kwargs: dict[str, Any] = {
+        "host": address,
+        "username": username,
+        "password": password,
+        "port": port,
+        "timeout": 5,
+        "ssl_wrapper": tls,
+    }
+    version = _version_tuple(os_version)
+    if version is not None and version[0] == 6 and version[1] < 43:
+        from librouteros.login import token
+
+        kwargs["login_method"] = token
+    try:
+        return await async_connect(**kwargs)
+    except LibRouterosError:
+        if version is not None or "login_method" in kwargs:
+            raise
+        from librouteros.login import token
+
+        kwargs["login_method"] = token
+        return await async_connect(**kwargs)
+
+
+async def _binary_connect(device: Device) -> AsyncApi:
+    username, password, configured_port, verify_tls = _credential(device)
+    port = configured_port if configured_port in {8728, 8729} else 8729
+    return await _connect_binary_credentials(
+        str(device.mgmt_ip),
+        port,
+        username,
+        password,
+        verify_tls,
+        device.os_version,
+    )
+
+
+async def _binary_rows(api: AsyncApi, path: str) -> list[dict[str, Any]]:
+    parts = tuple(part for part in path.split("/") if part)
+    return [dict(row) async for row in api.path(*parts)]
 
 
 async def _rest_get(
@@ -188,6 +306,7 @@ async def _collect_rest(device: Device) -> CollectionResult:
             if isinstance(raw_interfaces, list)
             else []
         )
+        snapshots: dict[str, list[dict[str, Any]]] = {}
         for endpoint, field in (
             ("ip/dhcp-server/lease", "dhcp_lease_count"),
             ("ip/arp", "arp_entry_count"),
@@ -195,6 +314,13 @@ async def _collect_rest(device: Device) -> CollectionResult:
             try:
                 rows = await _rest_get(client, base_url, endpoint)
                 setattr(device, field, len(rows) if isinstance(rows, list) else 0)
+                snapshots[
+                    "dhcp_leases" if field == "dhcp_lease_count" else "arp_entries"
+                ] = (
+                    [dict(row) for row in rows if isinstance(row, dict)]
+                    if isinstance(rows, list)
+                    else []
+                )
             except httpx.HTTPError:
                 logger.info("RouterOS %s data unavailable for %s", endpoint, device.name)
                 setattr(device, field, None)
@@ -212,7 +338,47 @@ async def _collect_rest(device: Device) -> CollectionResult:
                 wireless = []
                 logger.info("RouterOS wireless data unavailable for %s", device.name)
         _publish_wireless(device, wireless)
-        return CollectionResult(interfaces=interfaces)
+        snapshots["wireless_clients"] = [
+            {
+                "interface": interface,
+                "client_count": count,
+                "avg_signal_dbm": signal,
+            }
+            for interface, (count, signal) in _wireless_summary(
+                [row for row in wireless if isinstance(row, dict)]
+                if isinstance(wireless, list)
+                else []
+            ).items()
+        ]
+        try:
+            neighbor_rows = await _rest_get(client, base_url, "ip/neighbor")
+        except httpx.HTTPError:
+            neighbor_rows = []
+            logger.info("RouterOS neighbor data unavailable for %s", device.name)
+        neighbors = _routeros_neighbors(
+            [row for row in neighbor_rows if isinstance(row, dict)]
+            if isinstance(neighbor_rows, list)
+            else []
+        )
+        return CollectionResult(
+            interfaces=interfaces,
+            snapshots=snapshots,
+            neighbors=neighbors,
+            system=SystemInfo(
+                name=device.snmp_system_name,
+                description=device.snmp_system_description,
+                uptime_seconds=device.uptime_seconds,
+            ),
+            health=HealthData(
+                cpu_usage_percent=device.cpu_usage_percent,
+                memory_total_bytes=device.memory_total_bytes,
+                memory_used_bytes=device.memory_used_bytes,
+                disk_total_bytes=device.disk_total_bytes,
+                disk_used_bytes=device.disk_used_bytes,
+                temperature_celsius=device.temperature_celsius,
+                voltage_volts=device.voltage_volts,
+            ),
+        )
 
 
 class _BinaryApi:
@@ -358,57 +524,159 @@ class _BinaryApi:
 
 
 async def _collect_binary(device: Device) -> CollectionResult:
-    username, password, configured_port, verify_tls = _credential(device)
-    port = configured_port if configured_port in {8728, 8729} else 8729
-    async with _BinaryApi(
-        str(device.mgmt_ip), port, username, password, verify_tls
-    ) as client:
-        resource_rows = await client.command("/system/resource/print")
+    client = await _binary_connect(device)
+    try:
+        resource_rows = await _binary_rows(client, "system/resource")
         if not resource_rows:
             raise OSError("RouterOS resource response was empty")
         resource = resource_rows[0]
         _resource_fields(device, resource)
         try:
-            identity = await client.command("/system/identity/print")
+            identity = await _binary_rows(client, "system/identity")
             if identity and identity[0].get("name"):
                 device.snmp_system_name = identity[0]["name"][:255]
-        except OSError:
+        except (LibRouterosError, OSError):
             logger.info("RouterOS identity unavailable for %s", device.name)
 
         try:
-            health = await client.command("/system/health/print")
+            health = await _binary_rows(client, "system/health")
             device.temperature_celsius = _health_number(health, "temperature")
             device.voltage_volts = _health_number(health, "voltage")
-        except OSError:
+        except (LibRouterosError, OSError):
             logger.info("RouterOS health data unavailable for %s", device.name)
             device.temperature_celsius = None
             device.voltage_volts = None
 
-        interface_rows = await client.command("/interface/print")
+        interface_rows = await _binary_rows(client, "interface")
         interfaces = _interface_rows(interface_rows)
+        snapshots: dict[str, list[dict[str, Any]]] = {}
         for path, field in (
-            ("/ip/dhcp-server/lease/print", "dhcp_lease_count"),
-            ("/ip/arp/print", "arp_entry_count"),
+            ("ip/dhcp-server/lease", "dhcp_lease_count"),
+            ("ip/arp", "arp_entry_count"),
         ):
             try:
-                rows = await client.command(path)
+                rows = await _binary_rows(client, path)
                 setattr(device, field, len(rows))
-            except OSError:
+                snapshots[
+                    "dhcp_leases" if field == "dhcp_lease_count" else "arp_entries"
+                ] = rows
+            except (LibRouterosError, OSError):
                 logger.info("RouterOS %s data unavailable for %s", path, device.name)
                 setattr(device, field, None)
         try:
-            wireless = await client.command(
-                "/interface/wireless/registration-table/print"
+            wireless = await _binary_rows(
+                client, "interface/wireless/registration-table"
             )
-        except OSError:
+        except (LibRouterosError, OSError):
             try:
-                wireless = await client.command(
-                    "/interface/wifi/registration-table/print"
+                wireless = await _binary_rows(
+                    client, "interface/wifi/registration-table"
                 )
-            except OSError:
+            except (LibRouterosError, OSError):
                 wireless = []
         _publish_wireless(device, wireless)
-        return CollectionResult(interfaces=interfaces)
+        snapshots["wireless_clients"] = [
+            {
+                "interface": interface,
+                "client_count": count,
+                "avg_signal_dbm": signal,
+            }
+            for interface, (count, signal) in _wireless_summary(wireless).items()
+        ]
+        try:
+            neighbor_rows = await _binary_rows(client, "ip/neighbor")
+        except (LibRouterosError, OSError):
+            neighbor_rows = []
+            logger.info("RouterOS neighbor data unavailable for %s", device.name)
+        return CollectionResult(
+            interfaces=interfaces,
+            snapshots=snapshots,
+            neighbors=_routeros_neighbors(neighbor_rows),
+            system=SystemInfo(
+                name=device.snmp_system_name,
+                description=device.snmp_system_description,
+                uptime_seconds=device.uptime_seconds,
+            ),
+            health=HealthData(
+                cpu_usage_percent=device.cpu_usage_percent,
+                memory_total_bytes=device.memory_total_bytes,
+                memory_used_bytes=device.memory_used_bytes,
+                disk_total_bytes=device.disk_total_bytes,
+                disk_used_bytes=device.disk_used_bytes,
+                temperature_celsius=device.temperature_celsius,
+                voltage_volts=device.voltage_volts,
+            ),
+        )
+    finally:
+        await client.close()
+
+
+async def _collect_mikrotik_snmp_health(
+    device: Device, fallback: HealthData | None
+) -> HealthData:
+    from app.collectors.generic_snmp.collector import (
+        open_target,
+        snmp_get,
+        snmp_int,
+    )
+
+    core_oids = {
+        "cpu": "1.3.6.1.4.1.14988.1.1.3.11.0",
+        "memory_total": "1.3.6.1.4.1.14988.1.1.3.1.0",
+        "memory_free": "1.3.6.1.4.1.14988.1.1.3.2.0",
+    }
+    optional_oids = {
+        "disk_total": "1.3.6.1.4.1.14988.1.1.3.4.0",
+        "disk_free": "1.3.6.1.4.1.14988.1.1.3.5.0",
+        "voltage": "1.3.6.1.4.1.14988.1.1.3.6.0",
+        "temperature": "1.3.6.1.4.1.14988.1.1.3.7.0",
+    }
+    engine, auth, target = await open_target(device)
+    try:
+        try:
+            values = await snmp_get(engine, auth, target, list(core_oids.values()))
+        except OSError as exc:
+            logger.info(
+                "MikroTik resource MIB unavailable for %s: %s",
+                device.name,
+                type(exc).__name__,
+            )
+            return fallback or HealthData()
+        for oid in optional_oids.values():
+            try:
+                values.update(await snmp_get(engine, auth, target, [oid]))
+            except OSError:
+                logger.debug("Optional MikroTik resource OID unavailable on %s", device.name)
+    finally:
+        engine.close_dispatcher()
+
+    def value(key: str) -> int | None:
+        return snmp_int(values.get(core_oids.get(key) or optional_oids[key]))
+
+    memory_total = value("memory_total")
+    memory_free = value("memory_free")
+    disk_total = value("disk_total")
+    disk_free = value("disk_free")
+    cpu = value("cpu")
+    voltage = value("voltage")
+    temperature = value("temperature")
+    return HealthData(
+        cpu_usage_percent=float(cpu) if cpu is not None else None,
+        memory_total_bytes=memory_total,
+        memory_used_bytes=(
+            max(memory_total - memory_free, 0)
+            if memory_total is not None and memory_free is not None
+            else None
+        ),
+        disk_total_bytes=disk_total,
+        disk_used_bytes=(
+            max(disk_total - disk_free, 0)
+            if disk_total is not None and disk_free is not None
+            else None
+        ),
+        temperature_celsius=float(temperature) if temperature is not None else None,
+        voltage_volts=voltage / 10 if voltage is not None else None,
+    )
 
 
 def _publish_wireless(device: Device, rows: Any) -> None:
@@ -463,30 +731,76 @@ async def probe_routeros_api(
         pass
 
     binary_port = port if port in {8728, 8729} else 8729
-    async with _BinaryApi(
+    client = await _connect_binary_credentials(
         address, binary_port, username, password, verify_tls
-    ) as client:
-        await client.command("/system/resource/print")
+    )
+    try:
+        await _binary_rows(client, "system/resource")
+    finally:
+        await client.close()
     return time.perf_counter() - started
 
 
-class MikroTikCollector:
+class MikroTikCollector(BaseCollector):
     async def collect(self, device: Device) -> CollectionResult:
         if device.check_type is DeviceCheckType.SNMP:
-            from app.worker import poll_snmp_telemetry
-
-            return CollectionResult(interfaces=await poll_snmp_telemetry(device))
+            shared = await GenericSNMPCollector().collect(device)
+            health = await _collect_mikrotik_snmp_health(device, shared.health)
+            return CollectionResult(
+                interfaces=shared.interfaces,
+                system=shared.system,
+                health=health,
+                neighbors=shared.neighbors,
+                snapshots=shared.snapshots,
+            )
         if device.check_type is DeviceCheckType.ROUTEROS_API:
             return await self._collect_routeros(device)
         raise ValueError("the MikroTik collector requires SNMP or RouterOS API")
+
+    async def collect_system(self, device: Device) -> SystemInfo:
+        if device.check_type is DeviceCheckType.SNMP:
+            return await GenericSNMPCollector().collect_system(device)
+        result = await self._collect_routeros(device)
+        if result.system is None:
+            raise RuntimeError("RouterOS collector returned no system data")
+        return result.system
+
+    async def collect_interfaces(self, device: Device) -> dict[int, InterfaceData]:
+        if device.check_type is DeviceCheckType.SNMP:
+            return await GenericSNMPCollector().collect_interfaces(device)
+        result = await self._collect_routeros(device)
+        return {
+            index: InterfaceData.model_validate(row)
+            for index, row in result.interfaces.items()
+        }
+
+    async def collect_health(self, device: Device) -> HealthData:
+        if device.check_type is DeviceCheckType.SNMP:
+            standard = await GenericSNMPCollector().collect_health(device)
+            return await _collect_mikrotik_snmp_health(device, standard)
+        result = await self._collect_routeros(device)
+        if result.health is None:
+            raise RuntimeError("RouterOS collector returned no health data")
+        return result.health
+
+    async def discover_neighbors(self, device: Device) -> list[NeighborData]:
+        if device.check_type is DeviceCheckType.SNMP:
+            return await GenericSNMPCollector().discover_neighbors(device)
+        result = await self._collect_routeros(device)
+        return result.neighbors
 
     @staticmethod
     async def _collect_routeros(device: Device) -> CollectionResult:
         profile = device.credential_profile
         if profile is None:
             raise RuntimeError("MikroTik collector requires a RouterOS API profile")
-        if profile.port in {8728, 8729}:
+        version = _version_tuple(device.os_version)
+        if profile.port in {8728, 8729} or (
+            version is not None and version < (7, 1)
+        ):
             return await _collect_binary(device)
+        if version is not None and version >= (7, 1):
+            return await _collect_rest(device)
         try:
             return await _collect_rest(device)
         except httpx.HTTPError as exc:
@@ -495,7 +809,7 @@ class MikroTikCollector:
                 device.name,
                 type(exc).__name__,
             )
-        except (OSError, ValueError) as exc:
+        except (LibRouterosError, OSError, ValueError) as exc:
             logger.info(
                 "RouterOS REST data unavailable for %s; trying binary API (%s)",
                 device.name,

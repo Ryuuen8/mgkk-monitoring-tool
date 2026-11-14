@@ -14,8 +14,10 @@ class DeviceCheckType(str, enum.Enum):
     PING_ONLY = "ping_only"
     SNMP = "snmp"
     ROUTEROS_API = "routeros_api"
+    RESTCONF = "restconf"
 
 
 class CollectorType(str, enum.Enum):
-    GENERIC = "generic"
+    GENERIC = "generic_snmp"
     MIKROTIK = "mikrotik"
+    CISCO = "cisco"
