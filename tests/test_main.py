@@ -17,4 +17,5 @@ def test_metrics_exposes_http_request_counter() -> None:
 
     assert response.status_code == 200
     assert "http_requests_total" in response.text
-    assert 'path="/health"' in response.text
+    assert "http_requests_total " in response.text
+    assert "http_requests_total{" not in response.text

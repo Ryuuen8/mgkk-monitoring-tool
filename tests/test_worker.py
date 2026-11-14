@@ -1,14 +1,26 @@
 """Unit tests for the DB-driven ping poller (uses the test database)."""
 
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from app.models import CredentialProfile, CredentialType, Device, NetworkInterface, Site
+from app.models import (
+    CredentialProfile,
+    CredentialType,
+    Device,
+    DeviceNeighbor,
+    DeviceSnapshot,
+    NetworkInterface,
+    Site,
+)
 from app.services.credentials import encrypt_secret
 from app.worker import (
+    DEVICE_LATENCY_MS,
     DEVICE_UP,
+    INTERFACE_CRC_ERRORS,
     INTERFACE_IN_BYTES,
+    INTERFACE_IN_UTILIZATION_PERCENT,
+    PACKET_LOSS_PERCENT,
     PING_LATENCY,
     PING_PACKET_LOSS,
     PingResult,
@@ -18,7 +30,9 @@ from app.worker import (
     list_poll_targets,
     poll_device,
     poll_due_devices,
+    save_device_snapshots,
     save_interface_telemetry,
+    save_neighbors,
 )
 from cryptography.fernet import Fernet
 from sqlalchemy import select
@@ -99,6 +113,8 @@ async def test_interface_telemetry_persists_snapshots_and_exports_counter_delta(
     labels = (device.name, "ether1", site.code)
     counter = INTERFACE_IN_BYTES.labels(*labels)
     initial_total = counter._value.get()
+    crc_counter = INTERFACE_CRC_ERRORS.labels(*labels)
+    initial_crc_total = crc_counter._value.get()
 
     await save_interface_telemetry(
         session,
@@ -109,16 +125,29 @@ async def test_interface_telemetry_persists_snapshots_and_exports_counter_delta(
                 "alias": "uplink",
                 "admin": 1,
                 "oper": 1,
-                "speed": 1000,
+                "speed": 0,
                 "in_octets": 100,
                 "out_octets": 200,
                 "in_errors": 2,
                 "out_errors": 0,
                 "in_discards": 0,
                 "out_discards": 1,
+                "crc_errors": 1,
             }
         },
     )
+    row = await session.scalar(
+        select(NetworkInterface).where(
+            NetworkInterface.device_id == device.id,
+            NetworkInterface.if_index == 1,
+        )
+    )
+    assert row is not None
+    row.link_speed_override_mbps = 1000
+    row.last_polled_at = datetime.now(UTC).replace(microsecond=0) - timedelta(
+        seconds=60
+    )
+    await session.commit()
     await save_interface_telemetry(
         session,
         device,
@@ -128,13 +157,14 @@ async def test_interface_telemetry_persists_snapshots_and_exports_counter_delta(
                 "alias": "uplink",
                 "admin": 1,
                 "oper": 1,
-                "speed": 1000,
-                "in_octets": 150,
+                "speed": 0,
+                "in_octets": 1_000_100,
                 "out_octets": 240,
                 "in_errors": 3,
                 "out_errors": 0,
                 "in_discards": 0,
                 "out_discards": 1,
+                "crc_errors": 4,
             }
         },
     )
@@ -147,9 +177,94 @@ async def test_interface_telemetry_persists_snapshots_and_exports_counter_delta(
     )
     assert row is not None
     assert row.alias == "uplink"
-    assert row.link_speed_mbps == 1000
-    assert int(row.last_in_octets) == 150
-    assert counter._value.get() - initial_total == 50
+    assert row.link_speed_mbps is None
+    assert row.link_speed_override_mbps == 1000
+    assert int(row.last_in_octets) == 1_000_100
+    assert counter._value.get() - initial_total == 1_000_000
+    assert crc_counter._value.get() - initial_crc_total == 3
+    assert INTERFACE_IN_UTILIZATION_PERCENT.labels(*labels)._value.get() == pytest.approx(
+        0.013333, rel=0.02
+    )
+
+
+async def test_routeros_operational_snapshots_are_upserted(session):
+    site = await make_site(session, "RS")
+    device = await make_device(session, site, "routeros-snapshot-test")
+    await save_device_snapshots(
+        session,
+        device,
+        {"dhcp_leases": [{"address": "192.0.2.10", "host-name": "client"}]},
+    )
+    await session.commit()
+    await save_device_snapshots(
+        session,
+        device,
+        {"dhcp_leases": [{"address": "192.0.2.11", "host-name": "updated"}]},
+    )
+    await session.commit()
+
+    rows = await session.scalars(
+        select(DeviceSnapshot).where(DeviceSnapshot.device_id == device.id)
+    )
+    snapshots = list(rows)
+    assert len(snapshots) == 1
+    assert snapshots[0].snapshot_type == "dhcp_leases"
+    assert snapshots[0].payload == [
+        {"address": "192.0.2.11", "host-name": "updated"}
+    ]
+
+
+async def test_neighbors_are_upserted_and_stale_rows_removed(session):
+    from app.collectors.base import NeighborData
+
+    site = await make_site(session, "NB")
+    device = await make_device(session, site, "cisco-neighbor-test")
+    await save_neighbors(
+        session,
+        device,
+        [
+            NeighborData(
+                protocol="cdp",
+                local_interface="Gi0/1",
+                remote_device="sw2",
+                remote_interface="Gi0/2",
+                remote_platform="C9300",
+                remote_address="192.0.2.2",
+                capabilities="switch",
+            ),
+            NeighborData(
+                protocol="lldp",
+                local_interface="Gi0/2",
+                remote_device="sw3",
+            ),
+        ],
+    )
+    await session.commit()
+
+    await save_neighbors(
+        session,
+        device,
+        [
+            NeighborData(
+                protocol="cdp",
+                local_interface="Gi0/1",
+                remote_device="sw2",
+                remote_interface="Gi0/2",
+                remote_platform="C9300X",
+            )
+        ],
+    )
+    await session.commit()
+
+    rows = list(
+        await session.scalars(
+            select(DeviceNeighbor).where(DeviceNeighbor.device_id == device.id)
+        )
+    )
+    assert len(rows) == 1
+    assert rows[0].remote_device == "sw2"
+    assert rows[0].remote_platform == "C9300X"
+    assert rows[0].remote_address is None
 
 
 async def make_site(session, code: str = "W") -> Site:
@@ -200,6 +315,10 @@ async def test_poll_due_devices_updates_status_and_metrics(session):
 
     labels = ("worker-rtr1", site.code)
     assert DEVICE_UP.labels(*labels)._value.get() == 1.0
+    assert DEVICE_LATENCY_MS.labels(*labels)._value.get() == pytest.approx(12)
+    assert PACKET_LOSS_PERCENT.labels(*labels)._value.get() == pytest.approx(
+        25
+    )
     assert PING_LATENCY.labels(*labels)._value.get() == pytest.approx(0.012)
     assert PING_PACKET_LOSS.labels(*labels)._value.get() == pytest.approx(0.25)
 
@@ -246,6 +365,7 @@ async def test_failed_ping_marks_device_down_without_timestamp(session):
 
     labels = ("worker-down", site.code)
     assert DEVICE_UP.labels(*labels)._value.get() == 0.0
+    assert PACKET_LOSS_PERCENT.labels(*labels)._value.get() == 100
     assert math.isnan(PING_LATENCY.labels(*labels)._value.get())
     assert PING_PACKET_LOSS.labels(*labels)._value.get() == 1.0
     assert device.last_seen_at is None
@@ -331,9 +451,40 @@ async def test_configured_snmp_check_decrypts_profile_secret(
     assert calls == [("192.0.2.5", 1161, "private-community")]
 
 
+async def test_configured_restconf_check_uses_cisco_probe(monkeypatch):
+    from app import worker
+    from app.collectors.cisco import restconf
+
+    calls = []
+
+    async def fake_probe(device):
+        calls.append(device.name)
+        return 0.02
+
+    monkeypatch.setattr(restconf, "probe_restconf", fake_probe)
+    monkeypatch.setattr(worker, "decrypt_secret", lambda _value: "unused")
+    device = Device(
+        site_id=1,
+        name="cisco-restconf-check",
+        mgmt_ip="192.0.2.6",
+        check_type="restconf",
+        credential_profile=CredentialProfile(
+            name="cisco-restconf-profile",
+            credential_type=CredentialType.CISCO_RESTCONF,
+            username="monitor",
+            secret_ciphertext="unused",
+        ),
+    )
+
+    result = await configured_check(device)
+    assert result.is_alive
+    assert result.avg_rtt == 0.02
+    assert calls == ["cisco-restconf-check"]
+
+
 async def test_routeros_api_check_uses_https_and_profile_options(monkeypatch):
     from app import worker
-    from app.collectors import mikrotik
+    from app.collectors.mikrotik import collector as mikrotik
 
     calls = {}
 

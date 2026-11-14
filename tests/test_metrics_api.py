@@ -206,7 +206,7 @@ async def test_interface_speed_override_and_bandwidth_metrics(
     assert body["in_bits_per_second"] == [
         {"t": 1_700_000_000.0, "value": 12.5}
     ]
-    assert len(observed_queries) == 8
+    assert len(observed_queries) == 11
     assert all(
         'device="metrics-rtr1"' in query
         and 'interface="ether3"' in query

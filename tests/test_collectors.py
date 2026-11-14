@@ -3,10 +3,12 @@ from types import SimpleNamespace
 
 import httpx
 from app.collectors import CollectionResult, get_collector
+from app.collectors.cisco import CiscoCollector
 from app.collectors.generic import GenericCollector
 from app.collectors.mikrotik import (
     MikroTikCollector,
     _BinaryApi,
+    _collect_binary,
     _collect_rest,
     _health_number,
     _interface_rows,
@@ -22,6 +24,7 @@ from cryptography.fernet import Fernet
 def test_registry_resolves_persisted_collector_types():
     assert isinstance(get_collector(CollectorType.GENERIC), GenericCollector)
     assert isinstance(get_collector(CollectorType.MIKROTIK), MikroTikCollector)
+    assert isinstance(get_collector(CollectorType.CISCO), CiscoCollector)
 
 
 def test_mikrotik_interface_records_use_shared_telemetry_shape():
@@ -88,17 +91,21 @@ def test_binary_api_length_prefix_boundaries():
 
 
 async def test_mikrotik_snmp_uses_shared_generic_system_interface_poll(monkeypatch):
-    from app import worker
+    from app.collectors.mikrotik import collector as mikrotik
 
     device = SimpleNamespace(check_type=DeviceCheckType.SNMP)
     interfaces = {1: {"name": "ether1", "in_octets": 100}}
     calls = []
 
-    async def shared_poll(passed_device):
+    async def shared_poll(_collector, passed_device):
         calls.append(passed_device)
-        return interfaces
+        return CollectionResult(interfaces=interfaces)
 
-    monkeypatch.setattr(worker, "poll_snmp_telemetry", shared_poll)
+    async def no_mikrotik_health(_device, fallback):
+        return fallback
+
+    monkeypatch.setattr(mikrotik.GenericSNMPCollector, "collect", shared_poll)
+    monkeypatch.setattr(mikrotik, "_collect_mikrotik_snmp_health", no_mikrotik_health)
     result = await MikroTikCollector().collect(device)
 
     assert calls == [device]
@@ -106,7 +113,7 @@ async def test_mikrotik_snmp_uses_shared_generic_system_interface_poll(monkeypat
 
 
 async def test_routeros_rest_persists_aggregated_telemetry_only(monkeypatch):
-    from app.collectors import mikrotik
+    from app.collectors.mikrotik import collector as mikrotik
     from app.worker import MIKROTIK_WIRELESS_CLIENTS
     from prometheus_client import generate_latest
 
@@ -159,6 +166,7 @@ async def test_routeros_rest_persists_aggregated_telemetry_only(monkeypatch):
                 "host-name": "wireless-client",
             }
         ],
+        "ip/neighbor": [],
     }
 
     class FakeResponse:
@@ -213,6 +221,10 @@ async def test_routeros_rest_persists_aggregated_telemetry_only(monkeypatch):
     assert device.arp_entry_count == 1
     assert result.interfaces[1]["in_octets"] == 4096
     assert result.interfaces[1]["out_discards"] == 4
+    assert result.snapshots["dhcp_leases"][0]["host-name"] == "private-client"
+    assert result.snapshots["wireless_clients"] == [
+        {"interface": "wlan1", "client_count": 1, "avg_signal_dbm": -61}
+    ]
     wireless_client_metric = MIKROTIK_WIRELESS_CLIENTS.labels(
         device.name, "wlan1", device.site.code
     )
@@ -226,7 +238,7 @@ async def test_routeros_rest_persists_aggregated_telemetry_only(monkeypatch):
 
 
 async def test_routeros_rest_probe_falls_back_to_v6_binary_api(monkeypatch):
-    from app.collectors import mikrotik
+    from app.collectors.mikrotik import collector as mikrotik
 
     calls = []
 
@@ -243,32 +255,37 @@ async def test_routeros_rest_probe_falls_back_to_v6_binary_api(monkeypatch):
         async def get(self, *_args, **_kwargs):
             raise httpx.ConnectError("RouterOS v6 has no REST endpoint")
 
-    class FakeBinaryApi:
-        def __init__(self, address, port, username, password, verify_tls):
-            calls.append((address, port, username, password, verify_tls))
+    class FakePath:
+        def __aiter__(self):
+            return self._rows()
 
-        async def __aenter__(self):
-            return self
+        async def _rows(self):
+            yield {"version": "6.49"}
 
-        async def __aexit__(self, *_):
+    class FakeApi:
+        def path(self, *parts):
+            calls.append(parts)
+            return FakePath()
+
+        async def close(self):
             return None
 
-        async def command(self, path):
-            calls.append(path)
-            return [{"version": "6.49"}]
+    async def fake_connect(**kwargs):
+        calls.append(kwargs)
+        return FakeApi()
 
     monkeypatch.setattr(mikrotik.httpx, "AsyncClient", FakeClient)
-    monkeypatch.setattr(mikrotik, "_BinaryApi", FakeBinaryApi)
+    monkeypatch.setattr(mikrotik, "async_connect", fake_connect)
 
     elapsed = await probe_routeros_api(
         "192.0.2.1", 443, "poller", "password", verify_tls=True
     )
 
     assert elapsed >= 0
-    assert calls == [
-        ("192.0.2.1", 8729, "poller", "password", True),
-        "/system/resource/print",
-    ]
+    assert calls[0]["host"] == "192.0.2.1"
+    assert calls[0]["port"] == 8729
+    assert calls[0]["username"] == "poller"
+    assert calls[1] == ("system", "resource")
 
 
 async def test_binary_api_supports_legacy_v6_challenge_login(monkeypatch):
@@ -301,3 +318,109 @@ async def test_binary_api_supports_legacy_v6_challenge_login(monkeypatch):
         ["/login", "=name=poller", f"=response=00{digest}"],
     ]
     assert api._authenticated is True
+
+
+async def test_routeros_v6_binary_rows_are_collected(monkeypatch):
+    from app.collectors.mikrotik import collector as mikrotik
+
+    device = SimpleNamespace(
+        name="chr-v6",
+        site=SimpleNamespace(code="LAB"),
+        os_version="6.49",
+        snmp_system_name=None,
+        snmp_system_description=None,
+        uptime_seconds=None,
+        cpu_usage_percent=None,
+        memory_total_bytes=None,
+        memory_used_bytes=None,
+        disk_total_bytes=None,
+        disk_used_bytes=None,
+        temperature_celsius=None,
+        voltage_volts=None,
+        dhcp_lease_count=None,
+        arp_entry_count=None,
+    )
+    rows_by_path = {
+        ("system", "resource"): [
+            {
+                "board-name": "CHR",
+                "version": "6.49",
+                "uptime": "1d2h",
+                "cpu-load": "20",
+                "total-memory": "2048",
+                "free-memory": "1024",
+            }
+        ],
+        ("system", "identity"): [{"name": "chr-v6-lab"}],
+        ("system", "health"): [{"name": "temperature", "value": "44C"}],
+        ("interface",): [
+            {
+                "name": "ether1",
+                "running": "true",
+                "rx-byte": "12000",
+                "tx-byte": "24000",
+            }
+        ],
+        ("ip", "dhcp-server", "lease"): [{"address": "192.0.2.5"}],
+        ("ip", "arp"): [{"address": "192.0.2.6"}],
+        ("interface", "wireless", "registration-table"): [],
+        ("ip", "neighbor"): [],
+    }
+
+    class FakePath:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def __aiter__(self):
+            return self._rows()
+
+        async def _rows(self):
+            for row in self.rows:
+                yield row
+
+    class FakeApi:
+        def path(self, *parts):
+            return FakePath(rows_by_path[parts])
+
+        async def close(self):
+            return None
+
+    async def fake_connect(_device):
+        return FakeApi()
+
+    monkeypatch.setattr(mikrotik, "_binary_connect", fake_connect)
+    monkeypatch.setattr(mikrotik, "_publish_wireless", lambda *_args: None)
+    result = await _collect_binary(device)
+
+    assert result.interfaces[1]["in_octets"] == 12000
+    assert result.interfaces[1]["out_octets"] == 24000
+    assert result.system.name == "chr-v6-lab"
+    assert result.health.cpu_usage_percent == 20
+    assert result.snapshots["dhcp_leases"] == [{"address": "192.0.2.5"}]
+    assert result.snapshots["arp_entries"] == [{"address": "192.0.2.6"}]
+
+
+async def test_unknown_routeros_version_retries_legacy_binary_login(monkeypatch):
+    from app.collectors.mikrotik import collector as mikrotik
+    from librouteros.exceptions import LibRouterosError
+
+    calls = []
+
+    class FakeApi:
+        async def close(self):
+            return None
+
+    async def fake_connect(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            raise LibRouterosError("login rejected")
+        return FakeApi()
+
+    monkeypatch.setattr(mikrotik, "async_connect", fake_connect)
+    api = await mikrotik._connect_binary_credentials(
+        "192.0.2.1", 8729, "poller", "password", True
+    )
+    await api.close()
+
+    assert "login_method" not in calls[0]
+    assert calls[1]["login_method"] is not None
