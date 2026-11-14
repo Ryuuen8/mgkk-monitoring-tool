@@ -44,28 +44,38 @@ not in the device polling or metrics flow.
    device with a stable inventory name, management IP, optional vendor/model
    metadata, and poll interval. The database row ID is the device identity;
    the IP is an editable address, not a unique identifier.
-2. **Choose a check and collector.** Select Ping only, SNMP, or RouterOS API,
-   then choose the generic SNMP or MikroTik telemetry collector. RouterOS API
-   checks require the MikroTik collector.
-3. **Protect credentials.** A profile stores an SNMP community or RouterOS
-   username/password. SNMPv3 profiles support SHA/SHA-256 authentication and
-   optional AES-128 privacy. Both passphrases are encrypted using the configured
-   `CREDENTIAL_ENCRYPTION_KEY`; profile responses never return either secret.
+2. **Choose a check and collector.** Select Ping only, SNMP, RouterOS API, or
+   RESTCONF, then choose the generic SNMP, MikroTik, or Cisco telemetry
+   collector. RouterOS API checks require the MikroTik collector; RESTCONF
+   checks require the Cisco collector.
+3. **Protect credentials.** A profile stores an SNMP community, RouterOS
+   username/password, or Cisco RESTCONF/SSH username/password. SNMPv3 profiles
+   support SHA/SHA-256 authentication and optional AES-128 privacy. All secrets
+   are encrypted using the configured `ENCRYPTION_KEY`; profile responses never
+   return them.
 4. **Discover poll work.** Every worker tick, the poller reads active devices
    and their check profiles from PostgreSQL. Each device is checked when its
    own poll interval has elapsed.
 5. **Check the device.**
    - **Ping:** `icmplib` sends three ICMP echo requests, each with a 2-second
      timeout. The worker container is granted `NET_RAW`.
-   - **SNMP:** both collectors use the same system identity, uptime, and IF-MIB
-     interface path. Generic CPU/memory use HOST-RESOURCES-MIB when available;
-     MikroTik adds vendor resource and health metrics.
+   - **SNMP:** every SNMP collector uses the same system identity, uptime, and
+     IF-MIB interface path. Generic CPU/memory use HOST-RESOURCES-MIB when
+     available and ENTITY-SENSOR-MIB for environmental readings; MikroTik adds
+     vendor resource and health metrics.
+   - **Cisco:** SNMP reads CISCO-PROCESS-MIB, CISCO-MEMORY-POOL-MIB,
+     CISCO-ENVMON-MIB, CISCO-CDP-MIB, and CISCO-STACKWISE-MIB in addition to
+     the shared IF-MIB/LLDP path. IOS-XE RESTCONF is an optional check type.
    - **RouterOS API:** the MikroTik collector uses REST on RouterOS v7.1+ and
      the binary API-SSL service on v6. Port 8728 can be explicitly selected for
      an unencrypted API connection. It collects system resources, interfaces,
-     and aggregate DHCP/ARP/wireless data. TLS verification is enabled by
-     default.
-6. **Publish results.** Device checks expose `device_up`, `ping_latency_seconds`,
+     aggregate DHCP/ARP/wireless data, and `ip/neighbor` adjacencies. TLS
+     verification is enabled by default.
+6. **Persist topology and dynamic data.** Discovered CDP, LLDP, and RouterOS
+   neighbors are upserted into `device_neighbors`; stack members, DHCP leases,
+   ARP entries, and wireless summaries are stored in `device_snapshots`.
+   Prometheus receives aggregate counters only, never neighbor identities.
+7. **Publish results.** Device checks expose `device_up`, `ping_latency_seconds`,
    and `ping_packet_loss_ratio`. Interface octet/error/discard metrics are
    Prometheus counters: each poll adds the positive delta from the saved
    SNMP/API counter, accounting for a counter reset or wrap.
@@ -74,7 +84,7 @@ not in the device polling or metrics flow.
    computed from the observed traffic delta and discovered or operator-overridden
    `ifHighSpeed`. The worker also updates last-seen and system/interface
    snapshots in PostgreSQL.
-7. **Display status and history.** Prometheus scrapes the API and worker.
+8. **Display status and history.** Prometheus scrapes the API and worker.
    The UI gets inventory from FastAPI and the latest per-device check status
    from `/api/devices/status`; the API queries Prometheus for status and
    historical latency, packet-loss, and interface telemetry. The device detail
@@ -86,8 +96,8 @@ not in the device polling or metrics flow.
 |---|---|
 | React + TypeScript | Inventory, encrypted profile management, interface list, traffic/error/discard charts, and bandwidth ranges |
 | FastAPI | Validates inventory/profile/interface requests and queries Prometheus |
-| PostgreSQL | Stores inventory, encrypted credentials, system snapshots, interface identities, speed overrides, and last counter samples |
-| Poller worker | Runs checks, polls SNMP system/interfaces and available vendor or standard resources, and exports metrics |
+| PostgreSQL | Stores inventory, encrypted credentials, system snapshots, interface identities, speed overrides, discovered neighbors, and last counter samples |
+| Poller worker | Runs checks, polls SNMP/RESTCONF/RouterOS telemetry, persists dynamic snapshots and topology, and exports metrics |
 | Prometheus | Scrapes API/worker metrics and retains time-series data for status/history |
 | Grafana | Included in Compose for dashboards using Prometheus as a data source |
 | Redis | Included in Compose; not currently used by the device-monitoring flow |
@@ -122,7 +132,7 @@ the UI:
    `www-ssl`; automatic v6 fallback uses API-SSL on 8729.
 2. Create a dedicated read-only SNMP community or RouterOS monitoring user.
    Restrict service access to the poller host/network where practical.
-3. Set `CREDENTIAL_ENCRYPTION_KEY` in `.env`, then start the app and apply the
+3. Set `ENCRYPTION_KEY` in `.env`, then start the app and apply the
    Alembic migration.
 4. Open **Credentials** in the UI and add an SNMP v2c/v3 or RouterOS API profile.
    For a self-signed lab certificate, TLS verification can be disabled for
@@ -134,8 +144,13 @@ the UI:
    peak throughput, and 24-hour/7-day/30-day bandwidth history after Prometheus
    has collected samples. Set a link-speed override for virtual/tunnel
    interfaces when `ifHighSpeed` is missing or inaccurate.
-7. Open Grafana's provisioned **MGKK Network Telemetry** or **MikroTik Router
-   Health** dashboard to compare interface traffic, utilization, and resources.
+7. Open Grafana's provisioned **Generic Router/Switch Health**,
+   **MGKK Network Telemetry**, or **MikroTik Router Health** dashboard to compare
+   interface traffic, utilization, errors, and resources.
+
+Follow [Phase 2 telemetry verification](./phase-2-verification.md) to compare
+the app's rates with cumulative Linux SNMP counters and CHR interface
+statistics. The procedure is not a claim that a live lab comparison was run.
 
 For ICMP, the worker has `NET_RAW`. SNMP, RouterOS REST, and binary API use
 UDP, HTTPS, and TCP respectively, so the poller container must also have IP

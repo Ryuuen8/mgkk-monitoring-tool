@@ -1,0 +1,49 @@
+services:
+  poller-worker:
+    cap_add:
+      - NET_RAW
+    environment:
+      LAB_SNMP_V2C_COMMUNITY: ${LAB_SNMP_V2C_COMMUNITY:?set LAB_SNMP_V2C_COMMUNITY in .env.lab}
+      LAB_SNMP_V3_USER: ${LAB_SNMP_V3_USER:?set LAB_SNMP_V3_USER in .env.lab}
+      LAB_SNMP_V3_AUTH_PASSPHRASE: ${LAB_SNMP_V3_AUTH_PASSPHRASE:?set LAB_SNMP_V3_AUTH_PASSPHRASE in .env.lab}
+      LAB_SNMP_V3_PRIV_PASSPHRASE: ${LAB_SNMP_V3_PRIV_PASSPHRASE:?set LAB_SNMP_V3_PRIV_PASSPHRASE in .env.lab}
+      LAB_ROUTEROS_USER: ${LAB_ROUTEROS_USER:?set LAB_ROUTEROS_USER in .env.lab}
+      LAB_ROUTEROS_PASSWORD: ${LAB_ROUTEROS_PASSWORD:?set LAB_ROUTEROS_PASSWORD in .env.lab}
+      LAB_POLLER_SUBNET: ${LAB_POLLER_SUBNET:-172.30.50.0/24}
+    networks:
+      - default
+      - lab
+
+  snmp-lab:
+    build:
+      context: ./deploy/lab/snmpd
+    environment:
+      SNMP_V2C_COMMUNITY: ${LAB_SNMP_V2C_COMMUNITY:?set LAB_SNMP_V2C_COMMUNITY in .env.lab}
+      SNMP_V3_USER: ${LAB_SNMP_V3_USER:?set LAB_SNMP_V3_USER in .env.lab}
+      SNMP_V3_AUTH_PASSPHRASE: ${LAB_SNMP_V3_AUTH_PASSPHRASE:?set LAB_SNMP_V3_AUTH_PASSPHRASE in .env.lab}
+      SNMP_V3_PRIV_PASSPHRASE: ${LAB_SNMP_V3_PRIV_PASSPHRASE:?set LAB_SNMP_V3_PRIV_PASSPHRASE in .env.lab}
+      POLLER_SUBNET: ${LAB_POLLER_SUBNET:-172.30.50.0/24}
+    networks:
+      - lab
+    restart: unless-stopped
+
+  mikrotik-chr:
+    image: evilfreelancer/docker-routeros:latest
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "127.0.0.1:8080:80"
+      - "127.0.0.1:8443:443"
+      - "127.0.0.1:18729:8729"
+    volumes:
+      - ./.lab/routeros:/data
+    networks:
+      - lab
+    restart: unless-stopped
+
+networks:
+  lab:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${LAB_POLLER_SUBNET:-172.30.50.0/24}

@@ -129,6 +129,20 @@
       ],
       "title": "Wireless clients and signal",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 21},
+      "id": 9,
+      "options": {"legend": {"showLegend": true}},
+      "targets": [
+        {"expr": "rate(interface_crc_errors_total{device=~\"$device\"}[5m])", "legendFormat": "{{interface}} CRC/FCS", "refId": "A"},
+        {"expr": "rate(interface_in_discards_total{device=~\"$device\"}[5m])", "legendFormat": "{{interface}} in discards", "refId": "B"},
+        {"expr": "rate(interface_out_discards_total{device=~\"$device\"}[5m])", "legendFormat": "{{interface}} out discards", "refId": "C"}
+      ],
+      "title": "Interface CRC/FCS errors and discards",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -147,11 +161,11 @@
       {
         "current": {},
         "datasource": {"type": "prometheus", "uid": "${datasource}"},
-        "definition": "label_values(mikrotik_dhcp_lease_count, device)",
+        "definition": "label_values(interface_in_bytes_total, device)",
         "includeAll": true,
         "multi": true,
         "name": "device",
-        "query": "label_values(mikrotik_dhcp_lease_count, device)",
+        "query": "label_values(interface_in_bytes_total, device)",
         "refresh": 1,
         "type": "query"
       }

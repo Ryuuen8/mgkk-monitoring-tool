@@ -5,6 +5,15 @@ architecture, end-to-end poll flow, MikroTik demo walkthrough, and talk track.
 The frontend also has a **Guide** tab with an in-app walkthrough of each UI
 screen and its controls.
 
+For the optional isolated SNMP/RouterOS lab, see
+[Lab setup](./docs/lab-setup.md). The UUID-based inventory and reachability
+surface is available under `/api/v1`; the existing `/api` endpoints remain
+available for compatibility.
+
+Use the [Phase 2 telemetry verification guide](./docs/phase-2-verification.md)
+to compare interface rates and utilization with lab Linux SNMP and MikroTik
+CHR counters.
+
 ## Start the infrastructure
 
 Copy `.env.example` to `.env`, then start the services from the repository root:
@@ -21,10 +30,13 @@ docker compose up --build
 
 The Compose stack includes the FastAPI API, a device poller worker,
 PostgreSQL, Redis, Prometheus, and Grafana. The poller can check devices using
-ICMP, SNMPv2c/v3, or the MikroTik RouterOS REST or binary API. SNMP and
-RouterOS API checks collect system/interface telemetry. MikroTik SNMP reports
-CPU and memory through its vendor MIB; generic SNMP uses HOST-RESOURCES-MIB
-when the agent implements it. Grafana dashboards are provisioned from
+ICMP, SNMPv2c/v3, the MikroTik RouterOS REST or binary API, or Cisco IOS-XE
+RESTCONF. SNMP and RouterOS API checks collect system/interface telemetry.
+MikroTik SNMP reports CPU and memory through its vendor MIB; generic SNMP uses
+HOST-RESOURCES-MIB when the agent implements it and ENTITY-SENSOR-MIB for
+temperature/voltage/fan readings. The Cisco collector adds CISCO-PROCESS-MIB,
+CISCO-MEMORY-POOL-MIB, CISCO-ENVMON-MIB, CDP/LLDP topology, and stack-member
+snapshots. Grafana dashboards are provisioned from
 `deploy/`. The worker has `NET_RAW` for ICMP. On Docker Desktop for Windows,
 additional routing or bridging may be needed for the poller container to reach
 a lab subnet; verify connectivity from inside that container. The API exposes
@@ -51,6 +63,8 @@ npm run dev
 
 The Vite development server proxies `/api` requests to the API on port 8000.
 Run `npm run lint` and `npm run build` from `frontend` to check the frontend.
+With the API running, regenerate its TypeScript types with
+`npm run generate:api`.
 
 ## Backend development with uv
 
@@ -130,12 +144,13 @@ in `backend/app/main.py`. Interactive docs: <http://localhost:8000/docs>.
 `PATCH` bodies use `exclude_unset`, so omitted fields are untouched. An
 explicit `null` for a NOT NULL column returns `422`.
 
-`check_type` is `ping_only`, `snmp`, or `routeros_api`. Devices also select a
-`collector`: `generic` for standard SNMP or `mikrotik` for RouterOS-specific
-collection. RouterOS API checks require the MikroTik collector. SNMP and
-RouterOS API checks require a matching encrypted credential profile; SNMP
-accepts either v2c or v3. Interface metrics have only `device`, `interface`,
-and `site` labels.
+`check_type` is `ping_only`, `snmp`, `routeros_api`, or `restconf`. Devices also
+select a `collector`: `generic_snmp` for standard SNMP, `mikrotik` for
+RouterOS-specific collection, or `cisco` for Cisco IOS/IOS-XE/NX-OS. RouterOS
+API checks require the MikroTik collector; RESTCONF checks require the Cisco
+collector. SNMP and RouterOS API checks require a matching encrypted credential
+profile; SNMP accepts either v2c or v3, and RESTCONF requires a Cisco RESTCONF
+profile. Interface metrics have only `device`, `interface`, and `site` labels.
 
 ### Device groups
 
@@ -155,34 +170,82 @@ and `site` labels.
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/credential-profiles` | List profiles without returning stored secrets |
-| `POST` | `/api/credential-profiles` | Create an encrypted SNMP v2c/v3 or RouterOS API profile |
+| `POST` | `/api/credential-profiles` | Create an encrypted SNMP v2c/v3, RouterOS API, Cisco RESTCONF, or Cisco SSH profile |
 | `PATCH` | `/api/credential-profiles/{profile_id}` | Update profile metadata or replace its secret |
 | `DELETE` | `/api/credential-profiles/{profile_id}` | Delete an unused profile; assigned profiles return `409` |
 
-## MikroTik and protocol checks
+## Versioned inventory API
 
-Choose the collector explicitly in the device form. Generic SNMP and MikroTik
-SNMP use the same system and IF-MIB interface polling path, including the
-64-bit `ifHCInOctets`/`ifHCOutOctets` counters and `ifHighSpeed`; MikroTik adds
-vendor CPU, memory, disk, temperature, and voltage metrics. Generic CPU and
-memory use HOST-RESOURCES-MIB when the agent implements it.
+The versioned inventory API is available under `/api/v1`:
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` / `POST` | `/api/v1/sites` | Paginated site list and site creation |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/sites/{site_id}` | Read, update, and delete a site |
+| `GET` / `POST` | `/api/v1/groups` | Paginated group list and group creation |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/groups/{group_id}` | Read, update, and delete a group |
+| `GET` / `POST` | `/api/v1/devices` | Filtered, paginated inventory and device creation |
+| `GET` / `PATCH` / `DELETE` | `/api/v1/devices/{uuid}` | Read, update, and delete by stable UUID |
+| `GET` | `/api/v1/devices/status` | Live reachability, latency (ms), and packet loss (%) |
+| `GET` | `/api/v1/devices/{uuid}/metrics` | Prometheus range data for latency and packet loss |
+| `GET` | `/api/v1/devices/{uuid}/interfaces` | Discovered interfaces and reported/manual speeds |
+| `GET` | `/api/v1/devices/{uuid}/neighbors` | Discovered CDP/LLDP/RouterOS adjacencies stored in PostgreSQL |
+| `PATCH` | `/api/v1/devices/{uuid}/interfaces/{interface_id}` | Set or clear an interface speed override |
+| `GET` | `/api/v1/devices/{uuid}/interfaces/metrics` | Batched interface traffic, errors, discards, and utilization |
+| `GET` | `/api/v1/devices/{uuid}/interfaces/{interface_id}/metrics` | One interface's traffic, errors, discards, and utilization |
+
+The v1 device contract uses `ip_address`, optional unique `mac_address`,
+`collector` (`generic_snmp`, `mikrotik`, or `cisco`), and UUID parent/device IDs.
+The database UUID is the stable public identity; integer foreign keys remain
+internally to preserve compatibility with the existing inventory API. Run the
+Alembic migrations through revision `0009` before using this API. The worker
+exports reachability, CPU/memory, temperature/voltage, fan/power-supply status,
+interface counters, interface utilization, and a low-cardinality neighbor count;
+neighbor identities stay in PostgreSQL.
+
+## Vendor collectors and protocol checks
+
+Choose the collector explicitly in the device form. Generic SNMP, MikroTik
+SNMP, and Cisco SNMP share the same system and IF-MIB interface polling path,
+including the 64-bit `ifHCInOctets`/`ifHCOutOctets` counters and `ifHighSpeed`;
+MikroTik adds vendor CPU, memory, disk, temperature, and voltage metrics. Generic
+CPU and memory use HOST-RESOURCES-MIB when the agent implements it. Generic
+environmental polling uses ENTITY-SENSOR-MIB; Cisco EnvMon fan and power-supply
+state is collected only by the Cisco collector.
+
+The Cisco collector keeps every Cisco Enterprise OID under
+`backend/app/collectors/cisco/mibs.py`. It reads CISCO-PROCESS-MIB CPU,
+CISCO-MEMORY-POOL-MIB memory, CISCO-ENVMON-MIB environment state,
+CISCO-STACKWISE-MIB members, and CISCO-CDP-MIB adjacencies, while LLDP and
+standard health reuse the shared generic SNMP helpers. Cisco devices can use
+SNMP (the default) or an optional IOS-XE RESTCONF check type. Stack members and
+discovered neighbors are dynamic data: they are stored in PostgreSQL, while
+Prometheus receives only aggregate counts.
+
+Every collector implements the same four operations: `collect_system`,
+`collect_interfaces`, `collect_health`, and `discover_neighbors`. Prometheus
+metric names and labels (`device`, `interface`, `site`) are identical across
+collectors. IP addresses, MAC addresses, hostnames, routes, VLANs, VRFs, and
+neighbor identities never become labels.
 
 The MikroTik collector supports RouterOS REST on v7.1+ and falls back to the
 binary API-SSL service on port 8729 for v6 devices. To use the unencrypted
 binary API on port 8728, set that port explicitly in the credential profile.
 It reads system resources/health, interface counters, DHCP lease and ARP
-totals, and wireless registration summaries. DHCP/ARP values are counts; wireless metrics are
-aggregated by interface. Client addresses, MACs, and hostnames are never stored
+totals, wireless registration summaries, and `ip/neighbor` adjacencies.
+DHCP/ARP values are counts; wireless metrics are aggregated by interface.
+Client addresses, MACs, hostnames, and neighbor identifiers are never stored
 as metric labels. Interface octet/error/discard values are Prometheus counters;
 the UI graphs `rate()` results and speed-normalized utilization over 24 hours,
 7 days, or 30 days. Counter snapshots persist between polls to handle resets.
 
 Non-ICMP checks require a reusable credential profile. SNMP profiles contain a
 read-only community string or SNMPv3 username, SHA/SHA-256 authentication
-passphrase, and optional AES-128 privacy passphrase; RouterOS API profiles
-contain a read-only username and password. All secrets are encrypted in
-PostgreSQL with Fernet. Generate a key
-and put it in `.env` as `CREDENTIAL_ENCRYPTION_KEY` before starting Compose:
+passphrase, and optional AES-128 privacy passphrase. RouterOS API profiles
+contain a read-only username and password. Cisco RESTCONF and Cisco SSH profiles
+contain a monitoring username and password; RESTCONF uses HTTPS on port 443 by
+default. All secrets are encrypted in PostgreSQL with Fernet. Generate a key
+and put it in `.env` as `ENCRYPTION_KEY` before starting Compose:
 
 ```powershell
 uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"

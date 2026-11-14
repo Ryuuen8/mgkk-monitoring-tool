@@ -1,0 +1,9 @@
+agentAddress udp:161
+
+rocommunity ${SNMP_V2C_COMMUNITY} ${POLLER_SUBNET} .1.3.6.1.2.1
+createUser ${SNMP_V3_USER} SHA "${SNMP_V3_AUTH_PASSPHRASE}" AES "${SNMP_V3_PRIV_PASSPHRASE}"
+rouser ${SNMP_V3_USER} priv .1.3.6.1.2.1
+
+sysLocation MGKK isolated test lab
+sysContact lab@example.invalid
+view system included .1.3.6.1.2.1

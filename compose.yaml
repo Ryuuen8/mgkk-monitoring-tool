@@ -8,7 +8,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mgkk}:${POSTGRES_PASSWORD:-local-dev-password}@postgres:5432/${POSTGRES_DB:-mgkk}
       REDIS_URL: redis://redis:6379/0
       PROMETHEUS_URL: http://prometheus:9090
-      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-${CREDENTIAL_ENCRYPTION_KEY:-}}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -34,7 +34,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       WORKER_TICK_SECONDS: ${WORKER_TICK_SECONDS:-5}
       WORKER_METRICS_PORT: ${WORKER_METRICS_PORT:-9101}
-      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-${CREDENTIAL_ENCRYPTION_KEY:-}}
     cap_add:
       - NET_RAW
     ports:
