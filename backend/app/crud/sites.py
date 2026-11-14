@@ -1,6 +1,6 @@
 """Site data access."""
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,12 +9,34 @@ from app.schemas import SiteCreate, SiteUpdate
 
 
 async def list_sites(
-    session: AsyncSession, *, limit: int = 50, offset: int = 0
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> tuple[list[Site], int]:
-    """Return one page of sites plus the total row count."""
-    total = await session.scalar(select(func.count()).select_from(Site)) or 0
+    """Return one filtered page of sites plus the total row count."""
+    filters = []
+    if q is not None and q.strip():
+        pattern = f"%{q.strip().lower()}%"
+        filters.append(
+            or_(
+                func.lower(Site.code).like(pattern),
+                func.lower(Site.name).like(pattern),
+            )
+        )
+    total = (
+        await session.scalar(
+            select(func.count()).select_from(Site).where(*filters)
+        )
+        or 0
+    )
     rows = await session.scalars(
-        select(Site).order_by(Site.id).limit(limit).offset(offset)
+        select(Site)
+        .where(*filters)
+        .order_by(Site.id)
+        .limit(limit)
+        .offset(offset)
     )
     return list(rows), total
 

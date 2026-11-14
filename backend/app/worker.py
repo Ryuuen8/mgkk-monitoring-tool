@@ -38,6 +38,7 @@ from app.models import (
     NetworkInterface,
 )
 from app.models.credentials import SnmpAuthProtocol, SnmpPrivacyProtocol
+from app.services import events
 from app.services.credentials import decrypt_secret
 
 load_dotenv()
@@ -48,31 +49,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Labels stay low-cardinality: name and site code, never tags or IPs.
+# Labels stay low-cardinality: name, site code, and the stable device UUID.
+# `device` remains for dashboards; `device_id` keeps history stable on rename.
 DEVICE_UP = Gauge(
     "device_up",
     "1 when the last configured device check succeeded, else 0",
-    ("device", "site"),
+    ("device", "site", "device_id"),
 )
 DEVICE_LATENCY_MS = Gauge(
     "device_latency_ms",
     "Average ICMP round-trip time in milliseconds",
-    ("device", "site"),
+    ("device", "site", "device_id"),
 )
 PACKET_LOSS_PERCENT = Gauge(
     "packet_loss_percent",
     "ICMP packet loss percentage (0-100)",
-    ("device", "site"),
+    ("device", "site", "device_id"),
 )
 PING_LATENCY = Gauge(
     "ping_latency_seconds",
     "Round-trip time in seconds of the last device check",
-    ("device", "site"),
+    ("device", "site", "device_id"),
 )
 PING_PACKET_LOSS = Gauge(
     "ping_packet_loss_ratio",
     "ICMP packet loss ratio (0-1) of the last poll",
-    ("device", "site"),
+    ("device", "site", "device_id"),
 )
 INTERFACE_IN_BYTES = Counter(
     "interface_in_bytes_total",
@@ -199,6 +201,21 @@ DEVICE_POWER_SUPPLIES_OK = Gauge(
     "1 when all reported power supplies are normal, 0 when any is not, -1 when unavailable",
     ("device", "site"),
 )
+DEVICE_POWER_SUPPLIES_TOTAL = Gauge(
+    "device_power_supplies_total",
+    "Number of power supplies reported by the device",
+    ("device", "site"),
+)
+DEVICE_POWER_SUPPLIES_FAILED = Gauge(
+    "device_power_supplies_failed",
+    "Number of power supplies reporting a failed state",
+    ("device", "site"),
+)
+DEVICE_PARENT_INFO = Gauge(
+    "device_parent_info",
+    "Stable device identity and upstream metadata for alert inhibition (always 1)",
+    ("device", "site", "device_id", "parent_device", "parent_device_id"),
+)
 MIKROTIK_DHCP_LEASES = Gauge(
     "mikrotik_dhcp_lease_count",
     "Number of DHCP leases",
@@ -228,6 +245,10 @@ DEVICE_NEIGHBOR_COUNT = Gauge(
 # NaN marks "no latency sample" so range queries can leave a gap instead of
 # carrying a stale value across an outage.
 NO_SAMPLE = float("nan")
+
+# Last published state, so Redis receives transitions rather than every poll.
+_last_device_status: dict[int, bool] = {}
+_parent_labels: dict[int, tuple[str, str]] = {}
 
 DEFAULT_TICK_SECONDS = 5.0
 
@@ -618,6 +639,7 @@ async def save_interface_telemetry(
         "out_discards": INTERFACE_OUT_DISCARDS,
         "crc_errors": INTERFACE_CRC_ERRORS,
     }
+    interface_changes: list[dict[str, Any]] = []
     for if_index, data in interfaces.items():
         name = str(data["name"])
         row = existing.get(if_index)
@@ -625,6 +647,9 @@ async def save_interface_telemetry(
             row = next((item for item in existing.values() if item.name == name), None)
             if row is not None:
                 if_index = row.if_index
+        is_new = row is None
+        previous_oper = row.oper_status if row is not None else None
+        previous_admin = row.admin_status if row is not None else None
         if row is None:
             row = NetworkInterface(device_id=device.id, if_index=if_index, name=name)
             session.add(row)
@@ -634,6 +659,20 @@ async def save_interface_telemetry(
         row.alias = str(data["alias"])[:255] if data.get("alias") else None
         row.admin_status = _snmp_int(data.get("admin"))
         row.oper_status = _snmp_int(data.get("oper"))
+        if not is_new and (
+            previous_oper != row.oper_status or previous_admin != row.admin_status
+        ):
+            interface_changes.append(
+                {
+                    "device": device.name,
+                    "device_id": str(device.public_id),
+                    "site": device.site.code,
+                    "interface": row.name,
+                    "admin_status": row.admin_status,
+                    "oper_status": row.oper_status,
+                    "up": row.oper_status == 1,
+                }
+            )
         speed = _snmp_int(data.get("speed"))
         row.link_speed_mbps = speed if speed and speed > 0 else None
         interface_labels = (device.name, row.name, device.site.code)
@@ -706,6 +745,8 @@ async def save_interface_telemetry(
             _remove_interface_metrics(device, row.name)
             await session.delete(row)
     await session.commit()
+    for change in interface_changes:
+        await events.publish_event("interface_status", change)
 
 
 async def save_device_snapshots(
@@ -873,30 +914,76 @@ async def list_poll_targets(session: AsyncSession) -> list[Device]:
         .options(
             selectinload(Device.site),
             selectinload(Device.credential_profile),
+            selectinload(Device.parent),
         )
         .order_by(Device.id)
     )
     return list(rows)
 
 
+def _publish_parent_info(device: Device) -> None:
+    """Expose the upstream device for Prometheus label joins and inhibition."""
+    parent = device.__dict__.get("parent")
+    parent_name = parent.name if parent is not None else ""
+    parent_id = str(parent.public_id) if parent is not None else ""
+    previous = _parent_labels.get(device.id)
+    if previous is not None and previous != (parent_name, parent_id):
+        DEVICE_PARENT_INFO.remove(
+            device.name,
+            device.site.code,
+            str(device.public_id),
+            previous[0],
+            previous[1],
+        )
+    DEVICE_PARENT_INFO.labels(
+        device.name,
+        device.site.code,
+        str(device.public_id),
+        parent_name,
+        parent_id,
+    ).set(1)
+    _parent_labels[device.id] = (parent_name, parent_id)
+
+
 def _publish(device: Device, result: PingResult) -> None:
-    site_code = device.site.code
-    DEVICE_UP.labels(device.name, site_code).set(1 if result.is_alive else 0)
+    labels = (device.name, device.site.code, str(device.public_id))
+    DEVICE_UP.labels(*labels).set(1 if result.is_alive else 0)
     if result.is_alive:
         latency = result.avg_rtt if math.isfinite(result.avg_rtt) else NO_SAMPLE
-        PING_LATENCY.labels(device.name, site_code).set(latency)
-        PING_PACKET_LOSS.labels(device.name, site_code).set(result.packet_loss)
-        DEVICE_LATENCY_MS.labels(device.name, site_code).set(
+        PING_LATENCY.labels(*labels).set(latency)
+        PING_PACKET_LOSS.labels(*labels).set(result.packet_loss)
+        DEVICE_LATENCY_MS.labels(*labels).set(
             latency * 1000 if math.isfinite(latency) else NO_SAMPLE
         )
-        PACKET_LOSS_PERCENT.labels(device.name, site_code).set(
-            result.packet_loss * 100
-        )
+        PACKET_LOSS_PERCENT.labels(*labels).set(result.packet_loss * 100)
     else:
-        PING_LATENCY.labels(device.name, site_code).set(NO_SAMPLE)
-        PING_PACKET_LOSS.labels(device.name, site_code).set(1.0)
-        DEVICE_LATENCY_MS.labels(device.name, site_code).set(NO_SAMPLE)
-        PACKET_LOSS_PERCENT.labels(device.name, site_code).set(100)
+        PING_LATENCY.labels(*labels).set(NO_SAMPLE)
+        PING_PACKET_LOSS.labels(*labels).set(1.0)
+        DEVICE_LATENCY_MS.labels(*labels).set(NO_SAMPLE)
+        PACKET_LOSS_PERCENT.labels(*labels).set(100)
+    _publish_parent_info(device)
+
+
+async def _publish_device_status(device: Device, result: PingResult) -> None:
+    previous = _last_device_status.get(device.id)
+    _last_device_status[device.id] = result.is_alive
+    if previous is not None and previous == result.is_alive:
+        return
+    await events.publish_event(
+        "device_status",
+        {
+            "device": device.name,
+            "device_id": str(device.public_id),
+            "site": device.site.code,
+            "up": result.is_alive,
+            "latency_ms": (
+                round(result.avg_rtt * 1000, 2)
+                if result.is_alive and math.isfinite(result.avg_rtt)
+                else None
+            ),
+            "packet_loss_percent": round(result.packet_loss * 100, 2),
+        },
+    )
 
 
 async def poll_device(
@@ -999,6 +1086,20 @@ async def poll_device(
                     if device.power_supplies_ok is not None
                     else NO_SAMPLE
                 )
+                DEVICE_POWER_SUPPLIES_TOTAL.labels(
+                    device.name, device.site.code
+                ).set(
+                    device.power_supplies_total
+                    if device.power_supplies_total is not None
+                    else NO_SAMPLE
+                )
+                DEVICE_POWER_SUPPLIES_FAILED.labels(
+                    device.name, device.site.code
+                ).set(
+                    device.power_supplies_failed
+                    if device.power_supplies_failed is not None
+                    else NO_SAMPLE
+                )
                 if device.collector is CollectorType.MIKROTIK:
                     MIKROTIK_DHCP_LEASES.labels(
                         device.name, device.site.code
@@ -1032,6 +1133,7 @@ async def poll_device(
     else:
         logger.info("Device check failed: %s (%s)", device.name, device.mgmt_ip)
 
+    await _publish_device_status(device, result)
     return result
 
 

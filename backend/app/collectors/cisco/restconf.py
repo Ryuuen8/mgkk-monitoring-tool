@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 _HEADERS = {"Accept": "application/yang-data+json"}
 MAX_TEXT = 255
+_ADMIN_UP = {"if-state-up", "up"}
+_OPER_UP = {"if-oper-state-ready", "up"}
 
 
 class RestconfError(OSError):
@@ -132,8 +134,8 @@ def _interfaces(payload: Any) -> dict[int, InterfaceData]:
         interfaces[index] = InterfaceData(
             name=name,
             alias=_as_text(row.get("description")),
-            admin=1 if row.get("admin-status") == "if-state-up" else 2,
-            oper=1 if row.get("oper-status") == "if-oper-state-ready" else 2,
+            admin=1 if row.get("admin-status") in _ADMIN_UP else 2,
+            oper=1 if row.get("oper-status") in _OPER_UP else 2,
             speed=(
                 round(speed_bits / 1_000_000)
                 if speed_bits is not None and speed_bits > 0
@@ -159,13 +161,18 @@ def _system(payload: Any) -> SystemInfo:
     )
 
 
+def _cpu_percent(payload: Any) -> int | None:
+    for key in ("five-minutes", "one-minute", "five-seconds"):
+        value = _int_or_none(_find_leaf(payload, key))
+        if value is not None:
+            return value
+    return None
+
+
 def _health(cpu_payload: Any, memory_payload: Any) -> HealthData:
-    cpu = _int_or_none(
-        _find_leaf(cpu_payload, "one-minute")
-        or _find_leaf(cpu_payload, "five-minutes")
-        or _find_leaf(cpu_payload, "five-seconds")
-    )
+    cpu = _cpu_percent(cpu_payload)
     rows = _find_list(memory_payload, "memory-statistic")
+
     totals = [_int_or_none(row.get("total-memory")) for row in rows]
     used = [_int_or_none(row.get("used-memory")) for row in rows]
     total_memory = sum(value for value in totals if value is not None)
@@ -237,6 +244,26 @@ def _neighbors(cdp_payload: Any | None, lldp_payload: Any | None) -> list[Neighb
     )
 
 
+async def _interfaces_payload(device: Device) -> Any:
+    """Read IOS-XE interface oper data, falling back to IETF state.
+
+    Older IOS-XE releases and some NX-OS images expose the standard
+    ``ietf-interfaces:interfaces-state`` model but not the Cisco oper model.
+    """
+    try:
+        return await _get(
+            device, "Cisco-IOS-XE-interfaces-oper:interfaces/interface"
+        )
+    except RestconfError as exc:
+        logger.info(
+            "RESTCONF Cisco interfaces unavailable for %s: %s; "
+            "trying ietf-interfaces",
+            device.name,
+            exc,
+        )
+        return await _get(device, "ietf-interfaces:interfaces-state")
+
+
 async def probe_restconf(device: Device) -> float:
     started = time.perf_counter()
     await _get(device, "Cisco-IOS-XE-native:native/hostname")
@@ -244,9 +271,8 @@ async def probe_restconf(device: Device) -> float:
 
 
 async def collect_restconf(device: Device) -> CollectionResult:
-    interfaces_payload = await _get(
-        device, "Cisco-IOS-XE-interfaces-oper:interfaces/interface"
-    )
+    interfaces_payload = await _interfaces_payload(device)
+
     hostname_payload, cpu_payload, memory_payload, cdp_payload, lldp_payload = (
         await asyncio.gather(
             _optional_get(

@@ -1,0 +1,182 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": false,
+  "graphTooltip": 0,
+  "id": null,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "device_cpu_usage_percent{device=~\"$device\"}", "legendFormat": "{{device}}", "refId": "A" }],
+      "title": "CPU (5-minute)",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 9, "x": 6, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "showLegend": true } },
+      "targets": [
+        { "expr": "device_memory_usage_bytes{device=~\"$device\"}", "legendFormat": "{{device}} used", "refId": "A" },
+        { "expr": "device_memory_total_bytes{device=~\"$device\"}", "legendFormat": "{{device}} total", "refId": "B" }
+      ],
+      "title": "Memory pools",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "celsius" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 5, "x": 15, "y": 0 },
+      "id": 3,
+      "options": { "legend": { "showLegend": true } },
+      "targets": [{ "expr": "device_temperature_celsius{device=~\"$device\"}", "legendFormat": "{{device}}", "refId": "A" }],
+      "title": "Temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": {
+        "defaults": { "min": -1, "max": 1, "mappings": [] },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Fan/PSU health" },
+            "properties": [{ "id": "unit", "value": "short" }]
+          }
+        ]
+      },
+      "gridPos": { "h": 7, "w": 4, "x": 20, "y": 0 },
+      "id": 4,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "background" },
+      "targets": [
+        { "expr": "device_fans_ok{device=~\"$device\"}", "legendFormat": "fans {{device}}", "refId": "A" },
+        { "expr": "device_power_supplies_ok{device=~\"$device\"}", "legendFormat": "PSU {{device}}", "refId": "B" }
+      ],
+      "title": "Fan / PSU health (1 ok, 0 alert, -1 n/a)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "bps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "id": 5,
+      "options": { "legend": { "showLegend": true } },
+      "targets": [
+        { "expr": "rate(interface_in_bytes_total{device=~\"$device\",interface=~\"$interface\"}[5m]) * 8", "legendFormat": "{{device}} / {{interface}} in", "refId": "A" },
+        { "expr": "rate(interface_out_bytes_total{device=~\"$device\",interface=~\"$interface\"}[5m]) * 8", "legendFormat": "{{device}} / {{interface}} out", "refId": "B" }
+      ],
+      "title": "Interface traffic",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "id": 6,
+      "options": { "legend": { "showLegend": true } },
+      "targets": [
+        { "expr": "interface_in_utilization_percent{device=~\"$device\",interface=~\"$interface\"}", "legendFormat": "{{interface}} in", "refId": "A" },
+        { "expr": "interface_out_utilization_percent{device=~\"$device\",interface=~\"$interface\"}", "legendFormat": "{{interface}} out", "refId": "B" }
+      ],
+      "title": "Link utilization",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "cps" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 7,
+      "options": { "legend": { "showLegend": true } },
+      "targets": [
+        { "expr": "rate(interface_in_errors_total{device=~\"$device\",interface=~\"$interface\"}[5m])", "legendFormat": "{{interface}} in errors", "refId": "A" },
+        { "expr": "rate(interface_out_errors_total{device=~\"$device\",interface=~\"$interface\"}[5m])", "legendFormat": "{{interface}} out errors", "refId": "B" },
+        { "expr": "rate(interface_crc_errors_total{device=~\"$device\",interface=~\"$interface\"}[5m])", "legendFormat": "{{interface}} CRC/FCS", "refId": "C" },
+        { "expr": "rate(interface_in_discards_total{device=~\"$device\",interface=~\"$interface\"}[5m])", "legendFormat": "{{interface}} in discards", "refId": "D" },
+        { "expr": "rate(interface_out_discards_total{device=~\"$device\",interface=~\"$interface\"}[5m])", "legendFormat": "{{interface}} out discards", "refId": "E" }
+      ],
+      "title": "Interface errors, CRC/FCS, and discards",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 12, "y": 15 },
+      "id": 8,
+      "options": { "legend": { "showLegend": true } },
+      "targets": [
+        { "expr": "interface_admin_status{device=~\"$device\",interface=~\"$interface\"}", "legendFormat": "{{interface}} admin", "refId": "A" },
+        { "expr": "interface_oper_status{device=~\"$device\",interface=~\"$interface\"}", "legendFormat": "{{interface}} oper", "refId": "B" },
+        { "expr": "interface_effective_speed_mbps{device=~\"$device\",interface=~\"$interface\"}", "legendFormat": "{{interface}} effective Mbps", "refId": "C" }
+      ],
+      "title": "Interface status and effective speed",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 4, "x": 20, "y": 15 },
+      "id": 9,
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "device_neighbor_count{device=~\"$device\"}", "legendFormat": "{{device}}", "refId": "A" }],
+      "title": "CDP + LLDP neighbors",
+      "type": "stat"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["mgkk", "cisco", "network"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "name": "datasource",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(interface_in_bytes_total, device)",
+        "includeAll": true,
+        "multi": true,
+        "name": "device",
+        "query": "label_values(interface_in_bytes_total, device)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {},
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(interface_in_bytes_total{device=~\"$device\"}, interface)",
+        "includeAll": true,
+        "multi": true,
+        "name": "interface",
+        "query": "label_values(interface_in_bytes_total{device=~\"$device\"}, interface)",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timezone": "browser",
+  "title": "Cisco Router/Switch Health",
+  "uid": "mgkk-cisco-router-switch-health",
+  "version": 1
+}

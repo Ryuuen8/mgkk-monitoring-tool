@@ -37,10 +37,13 @@ def _reject_nulls(changes: dict[str, object]) -> None:
 @router.get("", response_model=Page[SiteRead])
 async def list_sites(
     session: Annotated[AsyncSession, Depends(get_session)],
+    q: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> Page[SiteRead]:
-    rows, total = await crud.list_sites(session, limit=limit, offset=offset)
+    rows, total = await crud.list_sites(
+        session, q=q, limit=limit, offset=offset
+    )
     return Page(
         items=[SiteRead.model_validate(row) for row in rows],
         total=total,

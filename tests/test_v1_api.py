@@ -17,7 +17,7 @@ async def create_site(client: AsyncClient) -> dict:
 
 
 async def create_device(
-    client: AsyncClient, site_id: int, **overrides: object
+    client: AsyncClient, site_id: str, **overrides: object
 ) -> dict:
     payload: dict[str, object] = {
         "site_id": site_id,
@@ -38,6 +38,8 @@ async def test_v1_site_group_and_device_crud(client: AsyncClient):
     )
     assert group_response.status_code == 201
     group_id = group_response.json()["id"]
+    assert UUID(site["id"])
+    assert UUID(group_id)
 
     parent = await create_device(
         client,
@@ -119,6 +121,129 @@ async def test_v1_device_filters_and_pagination(client: AsyncClient):
     assert response.json()["total"] == 1
     assert len(response.json()["items"]) == 1
     assert response.json()["items"][0]["collector"] == "generic_snmp"
+
+
+async def test_v1_search_matches_management_ip_and_reports_total(
+    client: AsyncClient,
+):
+    site = await create_site(client)
+    await create_device(
+        client, site["id"], name="edge", ip_address="198.51.100.7"
+    )
+    await create_device(
+        client, site["id"], name="core", ip_address="198.51.100.8"
+    )
+
+    by_ip = await client.get("/api/v1/devices", params={"q": "198.51.100.7"})
+    assert by_ip.status_code == 200
+    assert by_ip.json()["total"] == 1
+    assert by_ip.json()["items"][0]["name"] == "edge"
+
+    second_page = await client.get(
+        "/api/v1/devices", params={"limit": 1, "offset": 1}
+    )
+    assert second_page.status_code == 200
+    assert second_page.json()["total"] == 2
+    assert len(second_page.json()["items"]) == 1
+
+
+async def test_v1_os_family_roundtrip_and_filters(client: AsyncClient):
+    site = await create_site(client)
+    cisco = await create_device(
+        client,
+        site["id"],
+        name="edge-cisco",
+        collector="cisco",
+        vendor="Cisco",
+        model="C9300-48P",
+        os_family="iosxe",
+    )
+    await create_device(
+        client,
+        site["id"],
+        name="linux-server",
+        os_family="linux",
+    )
+
+    assert cisco["os_family"] == "iosxe"
+    assert cisco["os_version"] is None
+
+    by_family = await client.get(
+        "/api/v1/devices", params={"os_family": "iosxe"}
+    )
+    assert by_family.status_code == 200
+    assert by_family.json()["total"] == 1
+    assert by_family.json()["items"][0]["id"] == cisco["id"]
+
+    by_search = await client.get("/api/v1/devices", params={"q": "c9300"})
+    assert by_search.status_code == 200
+    assert by_search.json()["total"] == 1
+    assert by_search.json()["items"][0]["name"] == "edge-cisco"
+
+    updated = await client.patch(
+        f"/api/v1/devices/{cisco['id']}",
+        json={"os_family": "ios", "os_version": "17.9.4"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["os_family"] == "ios"
+    assert updated.json()["os_version"] == "17.9.4"
+
+    invalid = await client.get(
+        "/api/v1/devices", params={"os_family": "windows"}
+    )
+    assert invalid.status_code == 422
+
+
+async def test_v1_site_and_group_search_filters(client: AsyncClient):
+    await client.post(
+        "/api/v1/sites", json={"code": "ALPHA", "name": "Alpha site"}
+    )
+    await client.post(
+        "/api/v1/sites", json={"code": "BETA", "name": "Beta site"}
+    )
+    sites = await client.get("/api/v1/sites", params={"q": "alpha"})
+    assert sites.status_code == 200
+    assert sites.json()["total"] == 1
+    assert sites.json()["items"][0]["code"] == "ALPHA"
+
+    await client.post("/api/v1/groups", json={"name": "Core"})
+    await client.post("/api/v1/groups", json={"name": "Edge"})
+    groups = await client.get("/api/v1/groups", params={"q": "edg"})
+    assert groups.status_code == 200
+    assert groups.json()["total"] == 1
+    assert groups.json()["items"][0]["name"] == "Edge"
+
+
+async def test_v1_device_status_reads_prometheus_vector(
+    client: AsyncClient, monkeypatch
+):
+    site = await create_site(client)
+    device = await create_device(client, site["id"], name="status-device")
+    seen: list[str] = []
+
+    async def fake_query(expression: str) -> list[dict]:
+        seen.append(expression)
+        value = (
+            "1"
+            if "device_up" in expression
+            else "12.5"
+            if "latency" in expression
+            else "5"
+        )
+        return [
+            {"metric": {"device_id": device["id"]}, "value": [1000, value]}
+        ]
+
+    monkeypatch.setattr("app.api.routes.v1.prometheus.query", fake_query)
+    response = await client.get(f"/api/v1/devices/{device['id']}/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["device_id"] == device["id"]
+    assert body["up"] is True
+    assert body["latency_ms"] == pytest.approx(12.5)
+    assert body["packet_loss_percent"] == pytest.approx(5)
+    assert len(seen) == 3
 
 
 async def test_v1_device_metrics_converts_units(client: AsyncClient, monkeypatch):
@@ -256,6 +381,30 @@ async def test_v1_rejects_missing_parent_and_self_parent(client: AsyncClient):
         json={"parent_device_id": device["id"]},
     )
     assert self_parent.status_code == 422
+
+
+async def test_v1_rejects_multi_device_parent_cycles(client: AsyncClient):
+    site = await create_site(client)
+    root = await create_device(client, site["id"], name="cycle-root")
+    middle = await create_device(
+        client, site["id"], name="cycle-middle", parent_device_id=root["id"]
+    )
+    leaf = await create_device(
+        client, site["id"], name="cycle-leaf", parent_device_id=middle["id"]
+    )
+
+    cycle = await client.patch(
+        f"/api/v1/devices/{root['id']}",
+        json={"parent_device_id": leaf["id"]},
+    )
+    assert cycle.status_code == 422
+    assert "cycle" in cycle.json()["detail"].lower()
+
+    moved = await client.patch(
+        f"/api/v1/devices/{leaf['id']}",
+        json={"parent_device_id": root["id"]},
+    )
+    assert moved.status_code == 200
 
 
 async def test_v1_cisco_collector_filter_and_restconf_validation(

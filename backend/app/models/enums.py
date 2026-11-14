@@ -17,6 +17,14 @@ class DeviceCheckType(str, enum.Enum):
     RESTCONF = "restconf"
 
 
+class OsFamily(str, enum.Enum):
+    ROUTEROS = "routeros"
+    IOS = "ios"
+    IOSXE = "iosxe"
+    NXOS = "nxos"
+    LINUX = "linux"
+
+
 class CollectorType(str, enum.Enum):
     GENERIC = "generic_snmp"
     MIKROTIK = "mikrotik"

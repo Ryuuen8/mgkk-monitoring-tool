@@ -10,7 +10,7 @@ from pydantic import (
     field_validator,
 )
 
-from app.models.enums import CollectorType, DeviceCheckType, DeviceType
+from app.models.enums import CollectorType, DeviceCheckType, DeviceType, OsFamily
 from app.schemas.common import ORMModel, Timestamps
 from app.schemas.credentials import CredentialProfileRef
 from app.schemas.device_group import DeviceGroupRef
@@ -44,6 +44,7 @@ class DeviceBase(BaseModel):
     credential_profile_id: int | None = None
     vendor: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=120)
+    os_family: OsFamily | None = None
     os_version: str | None = Field(default=None, max_length=64)
     serial_number: str | None = Field(default=None, max_length=120)
     parent_device_id: int | None = None
@@ -92,6 +93,7 @@ class DeviceUpdate(BaseModel):
     credential_profile_id: int | None = None
     vendor: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=120)
+    os_family: OsFamily | None = None
     os_version: str | None = Field(default=None, max_length=64)
     serial_number: str | None = Field(default=None, max_length=120)
     parent_device_id: int | None = None

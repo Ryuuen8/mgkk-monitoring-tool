@@ -1,0 +1,26 @@
+name: mgkk-cisco-lab
+
+# Attach the Cisco node to the Docker network created by
+# `deploy/docker-compose.lab.yml`, so the poller can reach it without
+# publishing management ports to the host.
+#
+# Start the compose lab first (it owns the network), then:
+#   containerlab deploy -t deploy/lab/cisco/cisco-iosxe.clab.yml
+#
+# The startup config is generated from .env.lab by
+# `uv run python backend/scripts/render_cisco_lab_config.py`.
+mgmt:
+  network: mgkk-cisco-lab
+  ipv4-subnet: 172.31.50.0/24
+
+topology:
+  nodes:
+    cisco-iosxe:
+      kind: cisco_csr1000v
+      # CSR1000v requires a licensed image. Build it with vrnetlab, or point
+      # CISCO_IOSXE_IMAGE at an image you are licensed to run.
+      image: ${CISCO_IOSXE_IMAGE:-vrnetlab/cisco_csr1000v:17.03.04}
+      mgmt-ipv4: 172.31.50.10
+      startup-config: ../../../.lab/cisco-lab-startup.cfg
+
+  links: []

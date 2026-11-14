@@ -18,25 +18,39 @@ flowchart LR
     DB[(PostgreSQL inventory)]
     Worker[Device poller worker]
     Targets[Lab devices\nMikroTik CHR / SNMP devices]
+    Syslog[Syslog receiver]
+    Redis[(Redis Pub/Sub)]
     Prom[Prometheus]
+    AM[Alertmanager]
+    Ops[Email / Slack]
     Grafana[Grafana]
 
     Operator --> UI
     UI -->|REST /api| API
-    API -->|inventory and encrypted profiles| DB
+    UI <-->|/api/v1/ws/events| Redis
+    API -->|inventory, profiles, alert history| DB
     Worker -->|device list and profiles| DB
     Worker -->|ICMP / SNMPv2c and v3 / RouterOS REST or binary API| Targets
     Worker -->|status, interface counters, rates, resources| Prom
+    Worker -->|device_status / interface_status| Redis
+    Targets -->|syslog UDP/TCP 5514| Syslog
+    Syslog -->|critical events| DB
+    Syslog -->|syslog_event| Redis
+    API -->|alert_fired / alert_resolved| Redis
+    Prom -->|alert rules| AM
+    AM -->|webhook| API
+    AM -->|email / Slack| Ops
+    AM -->|silences| API
     API -->|instant and range queries| Prom
     Prom -->|scrape /metrics| API
     Prom -->|scrape worker /metrics| Worker
     Grafana --> Prom
 ```
 
-The React development server proxies `/api` requests to FastAPI. In Docker
-Compose, the API, worker, PostgreSQL, Prometheus, and Grafana communicate over
-the Compose network. Redis is also part of the current Compose stack but is
-not in the device polling or metrics flow.
+The React development server proxies `/api` requests to FastAPI, including the
+WebSocket upgrade. In Docker Compose, the API, worker, syslog receiver,
+PostgreSQL, Redis, Prometheus, Alertmanager, and Grafana communicate over the
+Compose network.
 
 ## End-to-end device flow
 
@@ -86,7 +100,8 @@ not in the device polling or metrics flow.
    snapshots in PostgreSQL.
 8. **Display status and history.** Prometheus scrapes the API and worker.
    The UI gets inventory from FastAPI and the latest per-device check status
-   from `/api/devices/status`; the API queries Prometheus for status and
+   from `/api/v1/devices/status` (the legacy `/api/devices/status` remains
+   available); the API queries Prometheus for status and
    historical latency, packet-loss, and interface telemetry. The device detail
    view also shows discovered system/interface data from PostgreSQL snapshots.
 
@@ -94,13 +109,15 @@ not in the device polling or metrics flow.
 
 | Component | Responsibility |
 |---|---|
-| React + TypeScript | Inventory, encrypted profile management, interface list, traffic/error/discard charts, and bandwidth ranges |
-| FastAPI | Validates inventory/profile/interface requests and queries Prometheus |
-| PostgreSQL | Stores inventory, encrypted credentials, system snapshots, interface identities, speed overrides, discovered neighbors, and last counter samples |
-| Poller worker | Runs checks, polls SNMP/RESTCONF/RouterOS telemetry, persists dynamic snapshots and topology, and exports metrics |
-| Prometheus | Scrapes API/worker metrics and retains time-series data for status/history |
+| React + TypeScript | Inventory, profile management, interface charts, live status badges, alert center, maintenance windows, and syslog feed |
+| FastAPI | Validates inventory/profile/interface/alert requests and queries Prometheus |
+| PostgreSQL | Stores inventory, encrypted credentials, snapshots, topology, alert history, maintenance windows, and critical syslog events |
+| Poller worker | Runs checks, polls telemetry, persists snapshots/topology, exports metrics, and publishes state transitions |
+| Syslog receiver | Listens on UDP/TCP 5514, matches devices by management IP, stores critical events, and publishes live syslog events |
+| Prometheus | Scrapes API/worker metrics, evaluates alert rules, and retains time-series data |
+| Alertmanager | Groups, inhibits, and routes alerts; manages silences; forwards events to the API webhook |
 | Grafana | Included in Compose for dashboards using Prometheus as a data source |
-| Redis | Included in Compose; not currently used by the device-monitoring flow |
+| Redis | Pub/Sub bus that fans live events out to the authenticated WebSocket endpoint |
 
 ## Data and metric flow
 
@@ -119,9 +136,42 @@ The worker exports `device_up` (1/0), `ping_latency_seconds` (seconds),
 `ping_packet_loss_ratio` (0-1), interface byte/error/discard counters,
 link-utilization gauges, and CPU/memory gauges for devices exposing supported
 MIB data. The API applies
-`rate()` to true monotonic counters for interface history. Interface series
-use only `device`, `interface`, and `site` labels; IP addresses and arbitrary
-tags are never labels.
+`rate()` to true monotonic counters for interface history. Reachability series
+carry `device`, `site`, and the stable `device_id` UUID; interface series use
+only `device`, `interface`, and `site` labels. IP addresses and arbitrary tags
+are never labels.
+
+## Alerting, syslog, and live-event flow
+
+1. **Evaluate rules.** Prometheus runs the reachability, interface, bandwidth,
+   and hardware-health rules in `deploy/prometheus/alerts.yml`. Each rule
+   reduces its input with `max by (device, site)` and joins
+   `device_parent_info`, so alerts carry `device`, `site`, `device_id`,
+   `parent_device`, and `parent_device_id` without high-cardinality labels.
+2. **Inhibit and route.** Alertmanager groups alerts by alert name, device,
+   site, and severity. A parent `DeviceDown` inhibits downstream devices and
+   same-device interface/latency/resource alerts through `parent_device_id`.
+   Critical alerts go to email and Slack; every alert is posted to the API
+   webhook, including resolved notifications.
+3. **Store and broadcast alerts.** The API upserts `alert_events` by
+   fingerprint, applies open maintenance windows (storing suppressed alerts
+   without broadcasting), and publishes `alert_fired` or `alert_resolved` to
+   Redis.
+4. **Ingest syslog.** The syslog receiver parses RFC 3164/5424, RouterOS, and
+   Cisco messages, matches the source address to a device's management IP,
+   stores critical events in `syslog_events`, and publishes `syslog_event`.
+5. **Push to browsers.** `/api/v1/ws/events` subscribes to the `mgkk:events`
+   channel, optionally checks `WS_AUTH_TOKEN`, filters by `site`/`device`, and
+   streams events plus 25-second heartbeats. The UI updates status badges and
+   refreshes the alert and syslog views.
+6. **Silence planned work.** Maintenance windows create Alertmanager silences
+   for a device, site code, or each group member. The DB window is also
+   authoritative for webhook suppression, so a temporarily unreachable
+   Alertmanager does not create alert noise in the app.
+
+See [Phase 3: alerting, syslog, and live updates](./phase-3-alerting.md) for
+rule expressions, inhibition details, API examples, and device syslog
+configuration.
 
 ## MikroTik lab walkthrough
 
@@ -145,12 +195,14 @@ the UI:
    has collected samples. Set a link-speed override for virtual/tunnel
    interfaces when `ifHighSpeed` is missing or inaccurate.
 7. Open Grafana's provisioned **Generic Router/Switch Health**,
-   **MGKK Network Telemetry**, or **MikroTik Router Health** dashboard to compare
-   interface traffic, utilization, errors, and resources.
+   **MGKK Network Telemetry**, **MikroTik Router Health**, or
+   **Cisco Router/Switch Health** dashboard to compare interface traffic,
+   utilization, errors, resources, and environmental health.
 
 Follow [Phase 2 telemetry verification](./phase-2-verification.md) to compare
-the app's rates with cumulative Linux SNMP counters and CHR interface
-statistics. The procedure is not a claim that a live lab comparison was run.
+the app's rates with cumulative Linux SNMP counters, CHR interface statistics,
+and Cisco CLI/MIB output. The procedure is not a claim that a live lab
+comparison was run.
 
 For ICMP, the worker has `NET_RAW`. SNMP, RouterOS REST, and binary API use
 UDP, HTTPS, and TCP respectively, so the poller container must also have IP
@@ -194,5 +246,12 @@ in-app orientation before the following demo:
   `/metrics` endpoint also reports API request metrics.
 - Compose keeps Prometheus samples for 45 days so the 30-day bandwidth range is
   available with a retention buffer.
-- The API does not currently authenticate UI users. Keep it on a trusted
-  network and use read-only device credentials.
+- Alert history starts when Alertmanager first forwards an event; the UI does
+  not evaluate rules. Parent inhibition depends on the v1 `parent_device_id`
+  inventory links and the Prometheus `device_id` → `parent_device_id` relabel.
+- Syslog uses unauthenticated UDP/TCP; restrict port 5514 to the management
+  network. The WebSocket is open unless `WS_AUTH_TOKEN` is set, and the API has
+  no user authentication, so keep the whole stack on a trusted network.
+- Maintenance-window silence creation is best effort. Suppression recorded in
+  `alert_events` still applies when Alertmanager is unreachable, but external
+  Alertmanager notifications may not be silenced until it recovers.

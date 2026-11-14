@@ -12,7 +12,9 @@ available for compatibility.
 
 Use the [Phase 2 telemetry verification guide](./docs/phase-2-verification.md)
 to compare interface rates and utilization with lab Linux SNMP and MikroTik
-CHR counters.
+CHR counters. The [Phase 3 alerting guide](./docs/phase-3-alerting.md) covers
+Prometheus alert rules, Alertmanager routing and parent inhibition, maintenance
+windows, syslog ingestion, and the authenticated live-events WebSocket.
 
 ## Start the infrastructure
 
@@ -28,8 +30,10 @@ docker compose up --build
 `postgres:5432`; host tools (Alembic, pytest, a local `uvicorn`) use
 `DATABASE_URL`, which points at `localhost:$POSTGRES_PORT` (5433 by default).
 
-The Compose stack includes the FastAPI API, a device poller worker,
-PostgreSQL, Redis, Prometheus, and Grafana. The poller can check devices using
+The Compose stack includes the FastAPI API, a device poller worker, a syslog
+receiver, PostgreSQL, Redis, Prometheus, Alertmanager, and Grafana. A one-shot
+`migrate` service applies the Alembic schema before the API and worker start.
+The poller can check devices using
 ICMP, SNMPv2c/v3, the MikroTik RouterOS REST or binary API, or Cisco IOS-XE
 RESTCONF. SNMP and RouterOS API checks collect system/interface telemetry.
 MikroTik SNMP reports CPU and memory through its vendor MIB; generic SNMP uses
@@ -46,6 +50,7 @@ Services are bound to localhost:
 
 - API: <http://localhost:8000/health>
 - Prometheus: <http://localhost:9090>
+- Alertmanager: <http://localhost:9093>
 - Grafana: <http://localhost:3000> (credentials from `.env`)
 
 The example credentials are for local development only. Change them before
@@ -62,8 +67,8 @@ npm run dev
 ```
 
 The Vite development server proxies `/api` requests to the API on port 8000.
-Run `npm run lint` and `npm run build` from `frontend` to check the frontend.
-With the API running, regenerate its TypeScript types with
+Run `npm run lint`, `npm test`, and `npm run build` from `frontend` to check
+the frontend. With the API running, regenerate its TypeScript types with
 `npm run generate:api`.
 
 ## Backend development with uv
@@ -101,6 +106,10 @@ still win):
 uv run alembic -c backend/alembic.ini upgrade head   # from the repository root
 uv run alembic upgrade head                          # from backend/
 ```
+
+Compose applies the same migrations automatically through the `migrate`
+service. CI runs `alembic upgrade head` plus `alembic check` against a
+PostgreSQL 17 service, so model/schema drift fails the build.
 
 Model tests need a disposable PostgreSQL database; they drop and recreate the
 tables, so never point `TEST_DATABASE_URL` at real data. Create it once:
@@ -176,7 +185,9 @@ profile. Interface metrics have only `device`, `interface`, and `site` labels.
 
 ## Versioned inventory API
 
-The versioned inventory API is available under `/api/v1`:
+The versioned inventory API is available under `/api/v1`. Sites, groups, and
+devices use UUIDs as their public identity; legacy `/api` routes keep integer
+IDs.
 
 | Method | Path | Description |
 |---|---|---|
@@ -186,7 +197,8 @@ The versioned inventory API is available under `/api/v1`:
 | `GET` / `PATCH` / `DELETE` | `/api/v1/groups/{group_id}` | Read, update, and delete a group |
 | `GET` / `POST` | `/api/v1/devices` | Filtered, paginated inventory and device creation |
 | `GET` / `PATCH` / `DELETE` | `/api/v1/devices/{uuid}` | Read, update, and delete by stable UUID |
-| `GET` | `/api/v1/devices/status` | Live reachability, latency (ms), and packet loss (%) |
+| `GET` | `/api/v1/devices/status` | Live reachability, latency (ms), and packet loss (%) for all devices |
+| `GET` | `/api/v1/devices/{uuid}/status` | The same live status for one device |
 | `GET` | `/api/v1/devices/{uuid}/metrics` | Prometheus range data for latency and packet loss |
 | `GET` | `/api/v1/devices/{uuid}/interfaces` | Discovered interfaces and reported/manual speeds |
 | `GET` | `/api/v1/devices/{uuid}/neighbors` | Discovered CDP/LLDP/RouterOS adjacencies stored in PostgreSQL |
@@ -195,10 +207,18 @@ The versioned inventory API is available under `/api/v1`:
 | `GET` | `/api/v1/devices/{uuid}/interfaces/{interface_id}/metrics` | One interface's traffic, errors, discards, and utilization |
 
 The v1 device contract uses `ip_address`, optional unique `mac_address`,
-`collector` (`generic_snmp`, `mikrotik`, or `cisco`), and UUID parent/device IDs.
+`collector` (`generic_snmp`, `mikrotik`, or `cisco`), optional `os_family`
+(`routeros`, `ios`, `iosxe`, `nxos`, or `linux`), and UUID parent/device IDs.
+List endpoints accept `q` (name, hostname, vendor, model, or management IP),
+`limit`/`offset`, plus `collector`, `os_family`, `site_id`, `group_id`,
+`vendor`, `active`, and `check_type` filters. Parent links reject self-parents
+and multi-device cycles with `422`.
+
 The database UUID is the stable public identity; integer foreign keys remain
 internally to preserve compatibility with the existing inventory API. Run the
-Alembic migrations through revision `0009` before using this API. The worker
+Alembic migrations through revision `0012` before using this API. Reachability
+gauges use the low-cardinality `device`, `site`, and `device_id` labels, where
+`device_id` is the stable UUID; metrics queries select on that label. The worker
 exports reachability, CPU/memory, temperature/voltage, fan/power-supply status,
 interface counters, interface utilization, and a low-cardinality neighbor count;
 neighbor identities stay in PostgreSQL.
@@ -267,3 +287,31 @@ The Compose file does not create MikroTik CHR instances or a routed lab
 network. Configure SNMP and/or the RouterOS API service on each router, create
 a read-only monitoring account, and ensure the poller container can reach the
 router's management IP and selected service port.
+
+## Alerting, syslog, and live updates
+
+Prometheus evaluates the rules in `deploy/prometheus/alerts.yml` and forwards
+alerts to Alertmanager, which routes critical alerts to email and Slack and
+posts every event to `POST /api/v1/alerts/webhook`. Alert history,
+acknowledgements, maintenance windows, Alertmanager silences, and critical
+syslog messages are exposed under `/api/v1` and shown in the **Alerts** tab.
+Parent-down alerts suppress downstream devices through the low-cardinality
+`device_parent_info` metric and `parent_device_id` inhibition.
+
+The syslog receiver listens on UDP and TCP 5514. The worker, webhook, and syslog
+receiver publish state changes to Redis; the authenticated
+`/api/v1/ws/events` WebSocket streams them to the React UI for live status
+badges and alert/syslog refreshes. Configure the behavior in `.env`:
+
+| Variable | Purpose |
+|---|---|
+| `ALERTMANAGER_URL` | Alertmanager base URL used for silence management |
+| `WS_AUTH_TOKEN` | Required WebSocket token; leave unset only on a trusted local network |
+| `SMTP_SMARTHOST`, `SMTP_USERNAME`, `SMTP_PASSWORD` | Alert email relay |
+| `ALERT_EMAIL_FROM`, `ALERT_EMAIL_TO` | Alert email sender and recipients |
+| `SLACK_WEBHOOK_URL`, `SLACK_CHANNEL` | Optional Slack notifications |
+| `ALERT_WEBHOOK_URL` | Alertmanager webhook target (defaults to the API container) |
+| `SYSLOG_PORT`, `SYSLOG_MIN_SEVERITY` | Syslog listen port and retention threshold |
+
+See the [Phase 3 alerting guide](./docs/phase-3-alerting.md) for rule details,
+inhibition mechanics, API examples, and MikroTik/Cisco syslog configuration.

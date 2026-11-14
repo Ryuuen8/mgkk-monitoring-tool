@@ -1,6 +1,17 @@
 from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, Column, ForeignKey, Index, String, Table, Text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    ForeignKey,
+    Index,
+    String,
+    Table,
+    Text,
+    Uuid,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -34,6 +45,14 @@ class DeviceGroup(TimestampMixin, Base):
     __tablename__ = "device_groups"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # Stable public identity used by the versioned API.
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+        unique=True,
+        nullable=False,
+    )
     name: Mapped[str] = mapped_column(String(120), unique=True)
     description: Mapped[str | None] = mapped_column(Text)
 

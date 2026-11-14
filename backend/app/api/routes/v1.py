@@ -6,11 +6,12 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import device_groups as groups_crud
+from app.crud import sites as sites_crud
 from app.db.session import get_session
 from app.models import (
     CollectorType,
@@ -18,24 +19,24 @@ from app.models import (
     CredentialType,
     Device,
     DeviceCheckType,
+    DeviceGroup,
     DeviceNeighbor,
     NetworkInterface,
+    OsFamily,
     Site,
 )
 from app.schemas.common import Page
-from app.schemas.device_group import (
-    DeviceGroupCreate,
-    DeviceGroupRead,
-    DeviceGroupUpdate,
-)
+from app.schemas.device_group import DeviceGroupCreate, DeviceGroupUpdate
 from app.schemas.interface import (
     InterfaceMetrics,
     LinkSpeedOverrideUpdate,
     NetworkInterfaceRead,
 )
 from app.schemas.metrics import MetricPoint
+from app.schemas.site import SiteCreate, SiteUpdate
 from app.schemas.v1 import (
     CollectorV1,
+    DeviceGroupV1Read,
     DeviceMetricSeries,
     DeviceV1Create,
     DeviceV1Read,
@@ -43,6 +44,7 @@ from app.schemas.v1 import (
     DeviceV1Update,
     ErrorResponse,
     NeighborV1Read,
+    SiteV1Read,
 )
 from app.services import prometheus
 
@@ -76,10 +78,12 @@ def _collector_from_v1(value: str) -> CollectorType:
         ) from None
 
 
-def _device_read(device: Device, parent_id: UUID | None = None) -> DeviceV1Read:
+def _device_read(
+    device: Device, site_id: UUID, parent_id: UUID | None = None
+) -> DeviceV1Read:
     return DeviceV1Read(
         id=device.public_id,
-        site_id=device.site_id,
+        site_id=site_id,
         name=device.name,
         ip_address=str(device.mgmt_ip),
         mac_address=str(device.mac) if device.mac is not None else None,
@@ -89,6 +93,7 @@ def _device_read(device: Device, parent_id: UUID | None = None) -> DeviceV1Read:
         credential_profile_id=device.credential_profile_id,
         vendor=device.vendor,
         model=device.model,
+        os_family=device.os_family,
         os_version=device.os_version,
         parent_device_id=parent_id,
         active=device.is_active,
@@ -102,6 +107,8 @@ def _device_read(device: Device, parent_id: UUID | None = None) -> DeviceV1Read:
         fan_speed_rpm=device.fan_speed_rpm,
         fans_ok=device.fans_ok,
         power_supplies_ok=device.power_supplies_ok,
+        power_supplies_total=device.power_supplies_total,
+        power_supplies_failed=device.power_supplies_failed,
         uptime_seconds=device.uptime_seconds,
         dhcp_lease_count=device.dhcp_lease_count,
         arp_entry_count=device.arp_entry_count,
@@ -124,6 +131,18 @@ async def _parent_public_id(
 async def _get_device(session: AsyncSession, public_id: UUID) -> Device | None:
     return await session.scalar(
         select(Device).where(Device.public_id == public_id)
+    )
+
+
+async def _get_site(session: AsyncSession, public_id: UUID) -> Site | None:
+    return await session.scalar(select(Site).where(Site.public_id == public_id))
+
+
+async def _get_group(
+    session: AsyncSession, public_id: UUID
+) -> DeviceGroup | None:
+    return await session.scalar(
+        select(DeviceGroup).where(DeviceGroup.public_id == public_id)
     )
 
 
@@ -157,6 +176,21 @@ async def _resolve_parent(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "device cannot be its own parent",
         )
+    if excluding is not None:
+        ancestor_id = parent.parent_device_id
+        seen = {parent.id}
+        while ancestor_id is not None:
+            if ancestor_id == excluding:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "parent relationship would create a cycle",
+                )
+            if ancestor_id in seen:
+                break
+            seen.add(ancestor_id)
+            ancestor_id = await session.scalar(
+                select(Device.parent_device_id).where(Device.id == ancestor_id)
+            )
     return parent.id
 
 
@@ -203,20 +237,118 @@ async def _validate_device_check(
 async def _build_device_read(
     session: AsyncSession, device: Device
 ) -> DeviceV1Read:
-    return _device_read(device, await _parent_public_id(session, device))
+    site = await session.get(Site, device.site_id)
+    if site is None:  # pragma: no cover - FK constraint guarantees a site
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, "device site is missing"
+        )
+    return _device_read(
+        device, site.public_id, await _parent_public_id(session, device)
+    )
 
 
-@router.get("/groups", response_model=Page[DeviceGroupRead])
-async def list_groups(
+@router.get("/sites", response_model=Page[SiteV1Read])
+async def list_sites(
     session: Annotated[AsyncSession, Depends(get_session)],
+    q: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> Page[DeviceGroupRead]:
-    rows, total = await groups_crud.list_groups(
-        session, limit=limit, offset=offset
+) -> Page[SiteV1Read]:
+    rows, total = await sites_crud.list_sites(
+        session, q=q, limit=limit, offset=offset
     )
     return Page(
-        items=[DeviceGroupRead.model_validate(row) for row in rows],
+        items=[SiteV1Read.model_validate(row) for row in rows],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post(
+    "/sites", response_model=SiteV1Read, status_code=status.HTTP_201_CREATED
+)
+async def create_site(
+    payload: SiteCreate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> SiteV1Read:
+    try:
+        site = await sites_crud.create_site(session, payload)
+    except IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "a site with this code already exists"
+        ) from None
+    return SiteV1Read.model_validate(site)
+
+
+@router.get("/sites/{site_id}", response_model=SiteV1Read)
+async def get_site(
+    site_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> SiteV1Read:
+    site = await _get_site(session, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "site not found")
+    return SiteV1Read.model_validate(site)
+
+
+@router.patch("/sites/{site_id}", response_model=SiteV1Read)
+async def update_site(
+    site_id: UUID,
+    payload: SiteUpdate,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> SiteV1Read:
+    site = await _get_site(session, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "site not found")
+    changes = payload.model_dump(exclude_unset=True)
+    if any(
+        changes.get(field) is None
+        for field in ("code", "name", "timezone")
+        if field in changes
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "code, name, and timezone may not be null",
+        )
+    try:
+        site = await sites_crud.update_site(session, site, payload)
+    except IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "a site with this code already exists"
+        ) from None
+    return SiteV1Read.model_validate(site)
+
+
+@router.delete("/sites/{site_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_site(
+    site_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> None:
+    site = await _get_site(session, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "site not found")
+    try:
+        await sites_crud.delete_site(session, site)
+    except IntegrityError:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "site still has devices; move or delete them first",
+        ) from None
+
+
+@router.get("/groups", response_model=Page[DeviceGroupV1Read])
+async def list_groups(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    q: str | None = Query(default=None, max_length=120),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> Page[DeviceGroupV1Read]:
+    rows, total = await groups_crud.list_groups(
+        session, q=q, limit=limit, offset=offset
+    )
+    return Page(
+        items=[DeviceGroupV1Read.model_validate(row) for row in rows],
         total=total,
         limit=limit,
         offset=offset,
@@ -225,40 +357,40 @@ async def list_groups(
 
 @router.post(
     "/groups",
-    response_model=DeviceGroupRead,
+    response_model=DeviceGroupV1Read,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_group(
     payload: DeviceGroupCreate,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> DeviceGroupRead:
+) -> DeviceGroupV1Read:
     try:
         group = await groups_crud.create_group(session, payload)
     except IntegrityError:
         raise HTTPException(
             status.HTTP_409_CONFLICT, "a group with this name already exists"
         ) from None
-    return DeviceGroupRead.model_validate(group)
+    return DeviceGroupV1Read.model_validate(group)
 
 
-@router.get("/groups/{group_id}", response_model=DeviceGroupRead)
+@router.get("/groups/{group_id}", response_model=DeviceGroupV1Read)
 async def get_group(
-    group_id: int,
+    group_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> DeviceGroupRead:
-    group = await groups_crud.get_group(session, group_id)
+) -> DeviceGroupV1Read:
+    group = await _get_group(session, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "group not found")
-    return DeviceGroupRead.model_validate(group)
+    return DeviceGroupV1Read.model_validate(group)
 
 
-@router.patch("/groups/{group_id}", response_model=DeviceGroupRead)
+@router.patch("/groups/{group_id}", response_model=DeviceGroupV1Read)
 async def update_group(
-    group_id: int,
+    group_id: UUID,
     payload: DeviceGroupUpdate,
     session: Annotated[AsyncSession, Depends(get_session)],
-) -> DeviceGroupRead:
-    group = await groups_crud.get_group(session, group_id)
+) -> DeviceGroupV1Read:
+    group = await _get_group(session, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "group not found")
     if "name" in payload.model_fields_set and payload.name is None:
@@ -271,15 +403,15 @@ async def update_group(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "a group with this name already exists"
         ) from None
-    return DeviceGroupRead.model_validate(group)
+    return DeviceGroupV1Read.model_validate(group)
 
 
 @router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_group(
-    group_id: int,
+    group_id: UUID,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> None:
-    group = await groups_crud.get_group(session, group_id)
+    group = await _get_group(session, group_id)
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "group not found")
     await groups_crud.delete_group(session, group)
@@ -288,22 +420,49 @@ async def delete_group(
 @router.get("/devices", response_model=Page[DeviceV1Read])
 async def list_devices(
     session: Annotated[AsyncSession, Depends(get_session)],
-    site_id: int | None = None,
+    site_id: UUID | None = None,
     collector: str | None = None,
     active: bool | None = None,
     vendor: str | None = None,
+    os_family: OsFamily | None = None,
+    check_type: DeviceCheckType | None = None,
+    group_id: UUID | None = None,
+    q: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> Page[DeviceV1Read]:
-    filters = []
+    filters: list[Any] = []
     if site_id is not None:
-        filters.append(Device.site_id == site_id)
+        filters.append(
+            Device.site_id.in_(
+                select(Site.id).where(Site.public_id == site_id)
+            )
+        )
     if collector is not None:
         filters.append(Device.collector == _collector_from_v1(collector))
     if active is not None:
         filters.append(Device.is_active.is_(active))
     if vendor is not None:
         filters.append(func.lower(Device.vendor) == vendor.lower())
+    if os_family is not None:
+        filters.append(Device.os_family == os_family)
+    if check_type is not None:
+        filters.append(Device.check_type == check_type)
+    if group_id is not None:
+        filters.append(
+            Device.groups.any(DeviceGroup.public_id == group_id)
+        )
+    if q is not None and q.strip():
+        pattern = f"%{q.strip().lower()}%"
+        filters.append(
+            or_(
+                func.lower(Device.name).like(pattern),
+                func.lower(Device.hostname).like(pattern),
+                func.lower(Device.vendor).like(pattern),
+                func.lower(Device.model).like(pattern),
+                func.host(Device.mgmt_ip).like(pattern),
+            )
+        )
 
     total = (
         await session.scalar(
@@ -333,7 +492,8 @@ async def create_device(
     payload: DeviceV1Create,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> DeviceV1Read:
-    if await session.get(Site, payload.site_id) is None:
+    site = await _get_site(session, payload.site_id)
+    if site is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "site not found")
     await _check_mac(session, payload.mac_address)
     parent_device_id = await _resolve_parent(session, payload.parent_device_id)
@@ -345,7 +505,7 @@ async def create_device(
         collector_type,
     )
     device = Device(
-        site_id=payload.site_id,
+        site_id=site.id,
         name=payload.name,
         mgmt_ip=str(payload.ip_address),
         mac=payload.mac_address,
@@ -355,6 +515,7 @@ async def create_device(
         credential_profile_id=payload.credential_profile_id,
         vendor=payload.vendor,
         model=payload.model,
+        os_family=payload.os_family,
         os_version=payload.os_version,
         parent_device_id=parent_device_id,
         is_active=payload.active,
@@ -394,13 +555,37 @@ async def list_device_status(
         DeviceV1Status(
             device_id=device.public_id,
             name=device.name,
-            up=None if device.name not in up else up[device.name] >= 1,
-            latency_ms=latency.get(device.name),
-            packet_loss_percent=loss.get(device.name),
+            up=(
+                None
+                if str(device.public_id) not in up
+                else up[str(device.public_id)] >= 1
+            ),
+            latency_ms=latency.get(str(device.public_id)),
+            packet_loss_percent=loss.get(str(device.public_id)),
             last_seen_at=device.last_seen_at,
         )
         for device in devices
     ]
+
+
+@router.get(
+    "/devices/{device_id}/status",
+    response_model=DeviceV1Status,
+    responses={502: {"model": ErrorResponse}},
+)
+async def get_device_status(
+    device_id: UUID,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DeviceV1Status:
+    device = await _get_device(session, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
+    try:
+        return await _device_status(device)
+    except prometheus.PrometheusError as exc:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, "Prometheus metrics are unavailable"
+        ) from exc
 
 
 @router.get("/devices/{device_id}", response_model=DeviceV1Read)
@@ -441,8 +626,13 @@ async def update_device(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "required device fields may not be null",
         )
-    if "site_id" in changes and await session.get(Site, changes["site_id"]) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "site not found")
+    if "site_id" in changes:
+        site = await _get_site(session, changes["site_id"])
+        if site is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "site not found"
+            )
+        changes["site_id"] = site.id
     mac = changes.get("mac_address", device.mac)
     await _check_mac(session, mac, excluding=device.id)
     collector_type = device.collector
@@ -465,6 +655,7 @@ async def update_device(
         "mac_address": "mac",
         "vendor": "vendor",
         "model": "model",
+        "os_family": "os_family",
         "os_version": "os_version",
         "active": "is_active",
         "device_type": "device_type",
@@ -767,16 +958,48 @@ def _vector_values(result: list[dict[str, Any]]) -> dict[str, float]:
         sample = series.get("value")
         if not isinstance(metric, dict) or not isinstance(sample, list):
             continue
-        name = metric.get("device")
-        if not isinstance(name, str) or len(sample) < 2:
+        device_id = metric.get("device_id")
+        if not isinstance(device_id, str) or len(sample) < 2:
             continue
         try:
             value = float(sample[1])
         except (TypeError, ValueError):
             continue
         if math.isfinite(value):
-            values[name] = value
+            values[device_id] = value
     return values
+
+
+def _first_value(result: list[dict[str, Any]]) -> float | None:
+    for series in result:
+        sample = series.get("value")
+        if not isinstance(sample, list) or len(sample) < 2:
+            continue
+        try:
+            value = float(sample[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(value):
+            return value
+    return None
+
+
+async def _device_status(device: Device) -> DeviceV1Status:
+    selector = f"device_id={json.dumps(str(device.public_id))}"
+    up, latency, loss = await asyncio.gather(
+        prometheus.query(f"device_up{{{selector}}}"),
+        prometheus.query(f"device_latency_ms{{{selector}}}"),
+        prometheus.query(f"packet_loss_percent{{{selector}}}"),
+    )
+    up_value = _first_value(up)
+    return DeviceV1Status(
+        device_id=device.public_id,
+        name=device.name,
+        up=None if up_value is None else up_value >= 1,
+        latency_ms=_first_value(latency),
+        packet_loss_percent=_first_value(loss),
+        last_seen_at=device.last_seen_at,
+    )
 
 
 def _range_points(
@@ -832,7 +1055,7 @@ async def get_device_metrics(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "device not found")
     end = datetime.now(UTC)
     start = end - timedelta(minutes=range_minutes)
-    selector = f"device={json.dumps(device.name)}"
+    selector = f"device_id={json.dumps(str(device.public_id))}"
     try:
         latency, packet_loss = await asyncio.gather(
             prometheus.query_range(

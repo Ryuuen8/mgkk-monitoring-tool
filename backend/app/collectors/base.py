@@ -54,6 +54,8 @@ class HealthData(BaseModel):
     fan_speed_rpm: float | None = None
     fans_ok: bool | None = None
     power_supplies_ok: bool | None = None
+    power_supplies_total: int | None = None
+    power_supplies_failed: int | None = None
 
 
 class NeighborData(BaseModel):

@@ -22,7 +22,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
 from app.models.device_group import device_group_members
-from app.models.enums import CollectorType, DeviceCheckType, DeviceType
+from app.models.enums import (
+    CollectorType,
+    DeviceCheckType,
+    DeviceType,
+    OsFamily,
+)
 
 if TYPE_CHECKING:
     from app.models.credentials import CredentialProfile
@@ -106,6 +111,16 @@ class Device(TimestampMixin, Base):
     )
     vendor: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(120))
+    os_family: Mapped[OsFamily | None] = mapped_column(
+        Enum(
+            OsFamily,
+            name="os_family",
+            native_enum=False,
+            length=20,
+            create_constraint=True,
+            values_callable=lambda e: [member.value for member in e],
+        )
+    )
     os_version: Mapped[str | None] = mapped_column(String(64))
     serial_number: Mapped[str | None] = mapped_column(String(120))
 
@@ -140,6 +155,8 @@ class Device(TimestampMixin, Base):
     fan_speed_rpm: Mapped[float | None] = mapped_column(Float)
     fans_ok: Mapped[bool | None] = mapped_column(Boolean)
     power_supplies_ok: Mapped[bool | None] = mapped_column(Boolean)
+    power_supplies_total: Mapped[int | None] = mapped_column(Integer)
+    power_supplies_failed: Mapped[int | None] = mapped_column(Integer)
     dhcp_lease_count: Mapped[int | None] = mapped_column(Integer)
     arp_entry_count: Mapped[int | None] = mapped_column(Integer)
 

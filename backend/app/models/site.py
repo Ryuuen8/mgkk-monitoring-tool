@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, String, Text
+from sqlalchemy import BigInteger, String, Text, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin
@@ -13,6 +14,14 @@ class Site(TimestampMixin, Base):
     __tablename__ = "sites"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # Stable public identity used by the versioned API.
+    public_id: Mapped[UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        default=uuid4,
+        server_default=text("gen_random_uuid()"),
+        unique=True,
+        nullable=False,
+    )
     # Short, stable identifier; used as the `site` Prometheus label.
     code: Mapped[str] = mapped_column(String(32), unique=True)
     name: Mapped[str] = mapped_column(String(120))

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import AlertsCenter from "./components/AlertsCenter";
 import CredentialProfiles from "./components/CredentialProfiles";
 import DeviceFormV1 from "./components/DeviceFormV1";
 import DeviceInventoryV1 from "./components/DeviceInventoryV1";
@@ -6,7 +7,7 @@ import UiGuide from "./components/UiGuide";
 
 const DeviceDetailV1 = lazy(() => import("./components/DeviceDetailV1"));
 
-type Tab = "overview" | "devices" | "credentials" | "guide";
+type Tab = "overview" | "devices" | "alerts" | "credentials" | "guide";
 
 type DeviceRoute =
   | { view: "list" }
@@ -98,6 +99,12 @@ function App() {
           onClick={showDevices}
         >
           Devices
+        </button>
+        <button
+          className={`tab ${activeTab === "alerts" ? "tab-active" : ""}`}
+          onClick={() => setActiveTab("alerts")}
+        >
+          Alerts
         </button>
         <button
           className={`tab ${activeTab === "credentials" ? "tab-active" : ""}`}
@@ -201,6 +208,14 @@ function App() {
             </Suspense>
           )}
         </>
+      )}
+      {activeTab === "alerts" && (
+        <AlertsCenter
+          onOpenDevice={(id) => {
+            setActiveTab("devices");
+            setRoute({ view: "detail", id });
+          }}
+        />
       )}
       {activeTab === "credentials" && (
         <CredentialProfiles onDevices={showDevices} />

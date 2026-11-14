@@ -9,6 +9,7 @@ export type DeviceRead = components["schemas"]["DeviceRead"];
 export type DeviceStatus = components["schemas"]["DeviceStatusRead"];
 export type DeviceMetrics = components["schemas"]["DeviceMetrics"];
 export type DeviceType = components["schemas"]["DeviceType"];
+export type OsFamily = components["schemas"]["OsFamily"];
 export type CheckType = components["schemas"]["DeviceCheckType"];
 export type CollectorType = components["schemas"]["CollectorType"];
 export type CredentialType = components["schemas"]["CredentialType"];
@@ -19,6 +20,7 @@ export type SnmpPrivacyProtocol = components["schemas"]["SnmpPrivacyProtocol"];
 export type DeviceCreate = components["schemas"]["DeviceCreate"];
 export type DeviceUpdate = components["schemas"]["DeviceUpdate"];
 export type Site = components["schemas"]["SiteRead"];
+export type SiteV1 = components["schemas"]["SiteV1Read"];
 export type DeviceGroup = components["schemas"]["DeviceGroupRead"];
 export type MetricPoint = components["schemas"]["MetricPoint"];
 export type DeviceV1 = components["schemas"]["DeviceV1Read"];
@@ -29,6 +31,12 @@ export type DeviceMetricSeries = components["schemas"]["DeviceMetricSeries"];
 export type CollectorV1 = components["schemas"]["DeviceV1Read"]["collector"];
 export type InterfaceMetrics = components["schemas"]["InterfaceMetrics"];
 export type NetworkInterface = components["schemas"]["NetworkInterfaceRead"];
+export type AlertEvent = components["schemas"]["AlertEventRead"];
+export type MaintenanceWindow = components["schemas"]["MaintenanceWindowRead"];
+export type MaintenanceWindowCreate =
+  components["schemas"]["MaintenanceWindowCreate"];
+export type SyslogEvent = components["schemas"]["SyslogEventRead"];
+export type DeviceGroupV1 = components["schemas"]["DeviceGroupV1Read"];
 
 export const DEVICE_TYPES: DeviceType[] = [
   "router",
@@ -45,6 +53,31 @@ export const CHECK_TYPES: CheckType[] = [
   "routeros_api",
   "restconf",
 ];
+
+export const OS_FAMILIES: OsFamily[] = [
+  "routeros",
+  "ios",
+  "iosxe",
+  "nxos",
+  "linux",
+];
+
+export function formatOsFamily(family: OsFamily | null | undefined): string {
+  switch (family) {
+    case "routeros":
+      return "RouterOS";
+    case "ios":
+      return "Cisco IOS";
+    case "iosxe":
+      return "Cisco IOS-XE";
+    case "nxos":
+      return "Cisco NX-OS";
+    case "linux":
+      return "Linux";
+    default:
+      return "Not recorded";
+  }
+}
 
 /** Turn a FastAPI error body (or anything else) into a readable message. */
 export function errorMessage(error: unknown): string {

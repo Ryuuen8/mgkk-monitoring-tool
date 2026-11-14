@@ -10,9 +10,18 @@ services:
       LAB_ROUTEROS_USER: ${LAB_ROUTEROS_USER:?set LAB_ROUTEROS_USER in .env.lab}
       LAB_ROUTEROS_PASSWORD: ${LAB_ROUTEROS_PASSWORD:?set LAB_ROUTEROS_PASSWORD in .env.lab}
       LAB_POLLER_SUBNET: ${LAB_POLLER_SUBNET:-172.30.50.0/24}
+      LAB_CISCO_HOST: ${LAB_CISCO_HOST:-}
+      LAB_CISCO_SNMP_V3_USER: ${LAB_CISCO_SNMP_V3_USER:-${LAB_SNMP_V3_USER:-}}
+      LAB_CISCO_RESTCONF_USER: ${LAB_CISCO_RESTCONF_USER:-}
+      LAB_CISCO_RESTCONF_PASSWORD: ${LAB_CISCO_RESTCONF_PASSWORD:-}
+      LAB_CISCO_VERIFY_TLS: ${LAB_CISCO_VERIFY_TLS:-false}
+      LAB_CISCO_REQUIRED: ${LAB_CISCO_REQUIRED:-false}
+      LAB_SNMP_REQUIRED: ${LAB_SNMP_REQUIRED:-true}
+      LAB_ROUTEROS_REQUIRED: ${LAB_ROUTEROS_REQUIRED:-true}
     networks:
       - default
       - lab
+      - cisco-lab
 
   snmp-lab:
     build:
@@ -47,3 +56,11 @@ networks:
     ipam:
       config:
         - subnet: ${LAB_POLLER_SUBNET:-172.30.50.0/24}
+  # Shared with the optional Cisco containerlab node. Compose creates the
+  # network first; containerlab attaches the IOS-XE node to it.
+  cisco-lab:
+    name: mgkk-cisco-lab
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${LAB_CISCO_SUBNET:-172.31.50.0/24}

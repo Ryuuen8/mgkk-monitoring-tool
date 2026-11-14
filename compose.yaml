@@ -1,4 +1,16 @@
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mgkk}:${POSTGRES_PASSWORD:-local-dev-password}@postgres:5432/${POSTGRES_DB:-mgkk}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -8,10 +20,14 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mgkk}:${POSTGRES_PASSWORD:-local-dev-password}@postgres:5432/${POSTGRES_DB:-mgkk}
       REDIS_URL: redis://redis:6379/0
       PROMETHEUS_URL: http://prometheus:9090
+      ALERTMANAGER_URL: http://alertmanager:9093
+      WS_AUTH_TOKEN: ${WS_AUTH_TOKEN:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-${CREDENTIAL_ENCRYPTION_KEY:-}}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -40,6 +56,30 @@ services:
     ports:
       - "127.0.0.1:${WORKER_METRICS_PORT:-9101}:${WORKER_METRICS_PORT:-9101}"
     depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  syslog:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "app.syslog"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mgkk}:${POSTGRES_PASSWORD:-local-dev-password}@postgres:5432/${POSTGRES_DB:-mgkk}
+      REDIS_URL: redis://redis:6379/0
+      SYSLOG_PORT: 5514
+      SYSLOG_MIN_SEVERITY: ${SYSLOG_MIN_SEVERITY:-5}
+    ports:
+      - "${SYSLOG_PORT:-5514}:5514/udp"
+      - "${SYSLOG_PORT:-5514}:5514/tcp"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -87,7 +127,32 @@ services:
       - "127.0.0.1:9090:9090"
     volumes:
       - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    entrypoint: ["/bin/sh", "/etc/alertmanager/entrypoint.sh"]
+    environment:
+      SMTP_SMARTHOST: ${SMTP_SMARTHOST:-localhost:25}
+      ALERT_EMAIL_FROM: ${ALERT_EMAIL_FROM:-mgkk@example.invalid}
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO:-ops@example.invalid}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-false}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/REPLACE/REPLACE/REPLACE}
+      SLACK_CHANNEL: ${SLACK_CHANNEL:-#alerts}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-http://api:8000/api/v1/alerts/webhook}
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml.tmpl:ro
+      - ./deploy/alertmanager/entrypoint.sh:/etc/alertmanager/entrypoint.sh:ro
+      - alertmanager-data:/alertmanager
     depends_on:
       api:
         condition: service_healthy
@@ -113,4 +178,5 @@ volumes:
   postgres-data:
   redis-data:
   prometheus-data:
+  alertmanager-data:
   grafana-data:

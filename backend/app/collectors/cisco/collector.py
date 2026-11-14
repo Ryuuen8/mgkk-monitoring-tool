@@ -59,7 +59,7 @@ def _merge_neighbors(groups: list[NeighborData]) -> list[NeighborData]:
     )
 
 
-def _state_ok(states: dict[int, Any]) -> bool | None:
+def _state_counts(states: dict[int, Any]) -> tuple[int, int] | None:
     active = [
         state
         for raw in states.values()
@@ -68,7 +68,15 @@ def _state_ok(states: dict[int, Any]) -> bool | None:
     ]
     if not active:
         return None
-    return all(state == mibs.ENVMON_STATE_NORMAL for state in active)
+    failed = sum(state != mibs.ENVMON_STATE_NORMAL for state in active)
+    return len(active), failed
+
+
+def _state_ok(states: dict[int, Any]) -> bool | None:
+    counts = _state_counts(states)
+    if counts is None:
+        return None
+    return counts[1] == 0
 
 
 async def _first_walk(
@@ -97,8 +105,8 @@ async def poll_cisco_health(
         auth,
         target,
         [
-            mibs.CPU_COLUMNS["one_minute"],
             mibs.CPU_COLUMNS["five_minutes"],
+            mibs.CPU_COLUMNS["one_minute"],
             mibs.CPU_COLUMNS["five_seconds"],
         ],
         device_name=device_name,
@@ -202,9 +210,12 @@ async def poll_cisco_health(
     fans_ok = _state_ok(fan_states)
     if fans_ok is not None:
         updates["fans_ok"] = fans_ok
-    power_ok = _state_ok(supply_states)
-    if power_ok is not None:
-        updates["power_supplies_ok"] = power_ok
+    supply_counts = _state_counts(supply_states)
+    if supply_counts is not None:
+        total, failed = supply_counts
+        updates["power_supplies_total"] = total
+        updates["power_supplies_failed"] = failed
+        updates["power_supplies_ok"] = failed == 0
     return fallback.model_copy(update=updates) if updates else fallback
 
 

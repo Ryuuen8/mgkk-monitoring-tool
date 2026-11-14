@@ -36,10 +36,13 @@ def _reject_nulls(changes: dict[str, Any]) -> None:
 @router.get("", response_model=Page[DeviceGroupRead])
 async def list_groups(
     session: Annotated[AsyncSession, Depends(get_session)],
+    q: str | None = Query(default=None, max_length=120),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> Page[DeviceGroupRead]:
-    rows, total = await crud.list_groups(session, limit=limit, offset=offset)
+    rows, total = await crud.list_groups(
+        session, q=q, limit=limit, offset=offset
+    )
     return Page(
         items=[DeviceGroupRead.model_validate(row) for row in rows],
         total=total,

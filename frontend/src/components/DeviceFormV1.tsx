@@ -9,6 +9,9 @@ import {
   type DeviceType,
   type DeviceV1Create,
   type DeviceV1Update,
+  type OsFamily,
+  OS_FAMILIES,
+  formatOsFamily,
 } from "../api/client";
 
 type Props = {
@@ -28,6 +31,7 @@ function DeviceFormV1({ deviceId, onSaved, onCancel }: Props) {
   const [credentialProfileId, setCredentialProfileId] = useState("");
   const [vendor, setVendor] = useState("");
   const [model, setModel] = useState("");
+  const [osFamily, setOsFamily] = useState<OsFamily | "">("");
   const [osVersion, setOsVersion] = useState("");
   const [parentDeviceId, setParentDeviceId] = useState("");
   const [active, setActive] = useState(true);
@@ -91,6 +95,7 @@ function DeviceFormV1({ deviceId, onSaved, onCancel }: Props) {
       );
       setVendor(device.vendor ?? "");
       setModel(device.model ?? "");
+      setOsFamily(device.os_family ?? "");
       setOsVersion(device.os_version ?? "");
       setParentDeviceId(device.parent_device_id ?? "");
       setActive(device.active);
@@ -104,7 +109,7 @@ function DeviceFormV1({ deviceId, onSaved, onCancel }: Props) {
     setError(null);
     setSaving(true);
     const body = {
-      site_id: Number(siteId),
+      site_id: siteId,
       name: name.trim(),
       ip_address: ipAddress.trim(),
       mac_address: macAddress.trim() || null,
@@ -116,6 +121,7 @@ function DeviceFormV1({ deviceId, onSaved, onCancel }: Props) {
         : null,
       vendor: vendor.trim() || null,
       model: model.trim() || null,
+      os_family: osFamily || null,
       os_version: osVersion.trim() || null,
       parent_device_id: parentDeviceId || null,
       active,
@@ -362,6 +368,22 @@ function DeviceFormV1({ deviceId, onSaved, onCancel }: Props) {
                 onChange={(event) => setModel(event.target.value)}
                 maxLength={120}
               />
+            </label>
+            <label>
+              OS family <span className="muted">(optional)</span>
+              <select
+                value={osFamily}
+                onChange={(event) =>
+                  setOsFamily(event.target.value as OsFamily | "")
+                }
+              >
+                <option value="">Not recorded</option>
+                {OS_FAMILIES.map((family) => (
+                  <option value={family} key={family}>
+                    {formatOsFamily(family)}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               OS version <span className="muted">(optional)</span>

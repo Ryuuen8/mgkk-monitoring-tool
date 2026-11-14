@@ -27,6 +27,7 @@ from app.worker import (
     _aggregate_host_resources,
     _counter_delta,
     configured_check,
+    icmp_ping,
     list_poll_targets,
     poll_device,
     poll_due_devices,
@@ -38,6 +39,31 @@ from cryptography.fernet import Fernet
 from sqlalchemy import select
 
 NOW = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+
+
+async def test_icmp_ping_converts_rtt_and_loss(monkeypatch):
+    import icmplib
+
+    observed: dict[str, object] = {}
+
+    async def fake_async_ping(
+        address: str, *, count: int, timeout: int
+    ) -> object:
+        observed.update(address=address, count=count, timeout=timeout)
+        return type(
+            "PingReply",
+            (),
+            {"is_alive": True, "avg_rtt": 12.5, "packet_loss": 0.25},
+        )()
+
+    monkeypatch.setattr(icmplib, "async_ping", fake_async_ping)
+    result = await icmp_ping("192.0.2.10")
+
+    assert observed == {"address": "192.0.2.10", "count": 3, "timeout": 2}
+    assert result.is_alive is True
+    assert result.avg_rtt == pytest.approx(0.0125)
+    assert result.packet_loss == pytest.approx(0.25)
+
 
 
 def test_aggregate_host_resources_uses_average_cpu_and_ram_storage():
@@ -313,7 +339,7 @@ async def test_poll_due_devices_updates_status_and_metrics(session):
     assert last_polled[device.id] == 100.0
     assert device.last_seen_at == NOW
 
-    labels = ("worker-rtr1", site.code)
+    labels = ("worker-rtr1", site.code, str(device.public_id))
     assert DEVICE_UP.labels(*labels)._value.get() == 1.0
     assert DEVICE_LATENCY_MS.labels(*labels)._value.get() == pytest.approx(12)
     assert PACKET_LOSS_PERCENT.labels(*labels)._value.get() == pytest.approx(
@@ -363,7 +389,7 @@ async def test_failed_ping_marks_device_down_without_timestamp(session):
         session, fake_ping, last_polled={}, now_monotonic=10.0
     ) == [device.id]
 
-    labels = ("worker-down", site.code)
+    labels = ("worker-down", site.code, str(device.public_id))
     assert DEVICE_UP.labels(*labels)._value.get() == 0.0
     assert PACKET_LOSS_PERCENT.labels(*labels)._value.get() == 100
     assert math.isnan(PING_LATENCY.labels(*labels)._value.get())
@@ -383,7 +409,12 @@ async def test_pinger_exception_marks_device_down(session):
 
     assert result.is_alive is False
     assert result.packet_loss == 1.0
-    assert DEVICE_UP.labels("worker-error", site.code)._value.get() == 0.0
+    assert (
+        DEVICE_UP.labels(
+            "worker-error", site.code, str(device.public_id)
+        )._value.get()
+        == 0.0
+    )
 
 
 async def test_list_poll_targets_skips_inactive_devices(session):

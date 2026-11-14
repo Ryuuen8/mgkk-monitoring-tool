@@ -13,10 +13,13 @@ import {
   errorMessage,
   formatCollector,
   formatLatency,
+  formatOsFamily,
   type DeviceMetricSeries,
+  type DeviceV1Status,
   type InterfaceMetrics,
   type NetworkInterface,
 } from "../api/client";
+import { useLiveEvents } from "../hooks/useLiveEvents";
 
 type Props = {
   deviceId: string;
@@ -67,6 +70,59 @@ function DeviceDetailV1({ deviceId, onBack, onEdit }: Props) {
   const errorChartElement = useRef<HTMLDivElement>(null);
   const reachabilityChartElement = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+
+  useLiveEvents((event) => {
+    if (event.type === "device_status" && event.device_id === deviceId) {
+      queryClient.setQueryData<Record<string, DeviceV1Status>>(
+        ["v1-device-status"],
+        (previous) => {
+          const existing = previous?.[deviceId];
+          return {
+            ...previous,
+            [deviceId]: {
+              device_id: deviceId,
+              name: event.device ?? existing?.name ?? "",
+              up: Boolean(event.up),
+              latency_ms: event.latency_ms ?? null,
+              packet_loss_percent: event.packet_loss_percent ?? null,
+              last_seen_at: event.timestamp ?? existing?.last_seen_at ?? null,
+            },
+          };
+        },
+      );
+    }
+    if (
+      event.type === "interface_status" &&
+      event.device_id === deviceId &&
+      event.interface
+    ) {
+      queryClient.setQueryData<NetworkInterface[]>(
+        ["v1-device-interfaces", deviceId],
+        (previous) =>
+          previous?.map((item) =>
+            item.name === event.interface
+              ? {
+                  ...item,
+                  admin_status: event.admin_status ?? item.admin_status,
+                  oper_status: event.oper_status ?? item.oper_status,
+                }
+              : item,
+          ),
+      );
+    }
+  });
+
+  const statusQuery = useQuery<Record<string, DeviceV1Status>>({
+    queryKey: ["v1-device-status"],
+    queryFn: async () => {
+      const response = await api.GET("/api/v1/devices/status");
+      if (response.error) throw new Error(errorMessage(response.error));
+      return Object.fromEntries(
+        response.data.map((item) => [item.device_id, item]),
+      );
+    },
+    refetchInterval: 10_000,
+  });
 
   const deviceQuery = useQuery({
     queryKey: ["v1-device", deviceId],
@@ -180,7 +236,7 @@ function DeviceDetailV1({ deviceId, onBack, onEdit }: Props) {
           name: "Latency",
           type: "line",
           showSymbol: false,
-          smooth: true,
+          smooth: false,
           yAxisIndex: 0,
           data: metrics.latency.map((point) => [point.t * 1000, point.value]),
         },
@@ -364,6 +420,9 @@ function DeviceDetailV1({ deviceId, onBack, onEdit }: Props) {
   };
 
   const device = deviceQuery.data;
+  const status = statusQuery.data?.[deviceId];
+  const liveState =
+    status?.up == null ? "unknown" : status.up ? "online" : "offline";
   const latestLatency = metricsQuery.data?.latency.at(-1)?.value;
   const latestLoss = metricsQuery.data?.packet_loss_percent.at(-1)?.value;
   const liveIn = selectedMetrics && latest(selectedMetrics.in_bits_per_second);
@@ -427,7 +486,17 @@ function DeviceDetailV1({ deviceId, onBack, onEdit }: Props) {
           <p className="eyebrow">
             INVENTORY <span> / </span> DEVICE DETAIL
           </p>
-          <h1>{device.name}</h1>
+          <div className="device-title-row">
+            <h1>{device.name}</h1>
+            <span className={`status status-${liveState}`}>
+              <span className="status-dot" />
+              {liveState === "online"
+                ? "Up"
+                : liveState === "offline"
+                  ? "Down"
+                  : "No data"}
+            </span>
+          </div>
           <p className="subtitle">
             Stable ID <span className="mono">{device.id}</span>
           </p>
@@ -657,8 +726,10 @@ function DeviceDetailV1({ deviceId, onBack, onEdit }: Props) {
         />
       )}
       <p className="muted v1-device-meta">
-        Role: {device.device_type} · MAC: {device.mac_address ?? "Not recorded"} · Parent:{" "}
-        {device.parent_device_id ?? "None"} · {device.active ? "Polling enabled" : "Polling paused"}
+        Role: {device.device_type} · OS: {formatOsFamily(device.os_family)} · MAC:{" "}
+        {device.mac_address ?? "Not recorded"} · Parent:{" "}
+        {device.parent_device_id ?? "None"} ·{" "}
+        {device.active ? "Polling enabled" : "Polling paused"}
       </p>
     </section>
   );

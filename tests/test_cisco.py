@@ -3,10 +3,12 @@ from typing import Any
 
 from app.collectors.base import HealthData
 from app.collectors.cisco import mibs
+from app.collectors.cisco import restconf as restconf_module
 from app.collectors.cisco.collector import (
     _merge_neighbors,
     _state_ok,
     poll_cdp_neighbors,
+    poll_cisco_health,
     poll_stack_members,
 )
 from app.collectors.cisco.restconf import (
@@ -243,3 +245,106 @@ async def test_cisco_health_merges_standard_fallback(monkeypatch):
     assert health.voltage_volts == 12.1
     assert health.fans_ok is True
     assert health.power_supplies_ok is True
+
+
+async def test_cisco_snmp_prefers_five_minute_cpu(monkeypatch):
+    tables = {
+        mibs.CPU_COLUMNS["five_minutes"]: {1: 12},
+        mibs.CPU_COLUMNS["one_minute"]: {1: 30},
+        mibs.CPU_COLUMNS["five_seconds"]: {1: 90},
+    }
+
+    async def safe_walk(_engine, _auth, _target, oid, **_kwargs):
+        return tables.get(oid, {})
+
+    monkeypatch.setattr(generic, "safe_walk", safe_walk)
+
+    health = await poll_cisco_health(
+        object(),
+        object(),
+        object(),
+        HealthData(),
+        "cisco-test",
+    )
+    assert health.cpu_usage_percent == 12.0
+
+
+def test_restconf_health_prefers_five_minute_cpu():
+    health = restconf_module._health(
+        {
+            "Cisco-IOS-XE-process-cpu-oper:cpu-utilization": {
+                "five-minutes": 35,
+                "one-minute": 42,
+            }
+        },
+        None,
+    )
+    assert health.cpu_usage_percent == 35.0
+
+
+def test_restconf_parses_ietf_interfaces_state():
+    interfaces = _interfaces(
+        {
+            "ietf-interfaces:interfaces-state": {
+                "interface": [
+                    {
+                        "name": "GigabitEthernet2",
+                        "description": "ietf uplink",
+                        "admin-status": "up",
+                        "oper-status": "up",
+                        "speed": "10000000000",
+                        "statistics": {
+                            "in-octets": 10,
+                            "out-octets": 20,
+                            "in-errors": 1,
+                            "out-errors": 2,
+                            "in-discards": 3,
+                            "out-discards": 4,
+                            "in-crc-errors": 5,
+                        },
+                    }
+                ]
+            }
+        }
+    )
+    interface = interfaces[1]
+    assert interface.name == "GigabitEthernet2"
+    assert interface.alias == "ietf uplink"
+    assert interface.admin == 1
+    assert interface.oper == 1
+    assert interface.speed == 10_000
+    assert interface.in_octets == 10
+    assert interface.crc_errors == 5
+
+
+async def test_restconf_interfaces_fall_back_to_ietf_state(monkeypatch):
+    paths: list[str] = []
+
+    async def fake_get(_device, path):
+        paths.append(path)
+        if path.startswith("Cisco-IOS-XE-interfaces-oper"):
+            raise restconf_module.RestconfError("404")
+        return {
+            "ietf-interfaces:interfaces-state": {
+                "interface": [
+                    {
+                        "name": "GigabitEthernet3",
+                        "admin-status": "down",
+                        "oper-status": "down",
+                    }
+                ]
+            }
+        }
+
+    monkeypatch.setattr(restconf_module, "_get", fake_get)
+
+    payload = await restconf_module._interfaces_payload(_device())
+    interfaces = restconf_module._interfaces(payload)
+
+    assert paths == [
+        "Cisco-IOS-XE-interfaces-oper:interfaces/interface",
+        "ietf-interfaces:interfaces-state",
+    ]
+    assert interfaces[1].name == "GigabitEthernet3"
+    assert interfaces[1].admin == 2
+    assert interfaces[1].oper == 2

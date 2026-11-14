@@ -1,0 +1,90 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: '${SMTP_SMARTHOST}'
+  smtp_from: '${ALERT_EMAIL_FROM}'
+  smtp_auth_username: '${SMTP_USERNAME}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: ${SMTP_REQUIRE_TLS}
+
+route:
+  receiver: default-email
+  group_by: [alertname, device, site, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers:
+        - 'alertname="Watchdog"'
+      receiver: 'null'
+    - matchers:
+        - 'severity="critical"'
+      receiver: critical-email-chat
+      group_wait: 10s
+      group_interval: 2m
+      repeat_interval: 1h
+
+receivers:
+  - name: 'null'
+
+  - name: default-email
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        send_resolved: true
+        headers:
+          Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} on {{ .CommonLabels.device }}'
+        html: |
+          <h3>{{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})</h3>
+          <p>Device: <b>{{ .CommonLabels.device }}</b> at {{ .CommonLabels.site }}</p>
+          {{ range .Alerts }}
+          <p>{{ .Annotations.summary }}<br><small>{{ .Annotations.description }}</small></p>
+          {{ end }}
+    webhook_configs:
+      - url: '${ALERT_WEBHOOK_URL}'
+        send_resolved: true
+        max_alerts: 0
+
+  - name: critical-email-chat
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        send_resolved: true
+        headers:
+          Subject: '[CRITICAL] {{ .CommonLabels.alertname }} on {{ .CommonLabels.device }}'
+        html: |
+          <h3>{{ .CommonLabels.alertname }}</h3>
+          <p>Device: <b>{{ .CommonLabels.device }}</b> at {{ .CommonLabels.site }}</p>
+          {{ range .Alerts }}
+          <p>{{ .Annotations.summary }}<br><small>{{ .Annotations.description }}</small></p>
+          {{ end }}
+    slack_configs:
+      - api_url: '${SLACK_WEBHOOK_URL}'
+        channel: '${SLACK_CHANNEL}'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}{{ .Annotations.summary }}
+          ({{ .Labels.device }} / {{ .Labels.site }}){{ "\n" }}{{ end }}
+    webhook_configs:
+      - url: '${ALERT_WEBHOOK_URL}'
+        send_resolved: true
+        max_alerts: 0
+
+inhibit_rules:
+  # DeviceDown propagates its own device_id into parent_device_id; children
+  # carry their upstream id in parent_device_id, so only downstream alerts match.
+  - source_matchers:
+      - 'alertname="DeviceDown"'
+    target_matchers:
+      - 'alertname=~"DeviceDown|InterfaceDown|HighLatency|HighPacketLoss|HighUtilization|TrafficDrop|RisingInterfaceErrors|CRCFcsErrors|HighCpu|HighMemory|HighTemperature|FanFailure|PowerSupplyFailure|PSULostRedundancy"'
+    equal: ['parent_device_id']
+
+  - source_matchers:
+      - 'alertname="DeviceDown"'
+    target_matchers:
+      - 'alertname=~"InterfaceDown|HighLatency|HighPacketLoss|HighCpu|HighMemory|HighTemperature"'
+    equal: ['device']
+
+  - source_matchers:
+      - 'alertname="PowerSupplyFailure"'
+    target_matchers:
+      - 'alertname="PSULostRedundancy"'
+    equal: ['device']

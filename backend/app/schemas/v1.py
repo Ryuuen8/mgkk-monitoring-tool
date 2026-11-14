@@ -11,15 +11,38 @@ from pydantic import (
     field_validator,
 )
 
-from app.models.enums import DeviceCheckType, DeviceType
+from app.models.enums import DeviceCheckType, DeviceType, OsFamily
 from app.schemas.device import normalize_mac
 from app.schemas.metrics import MetricPoint
 
 CollectorV1 = Literal["generic_snmp", "mikrotik", "cisco"]
 
 
+class SiteV1Read(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID = Field(validation_alias="public_id")
+    code: str
+    name: str
+    address: str | None
+    timezone: str
+    notes: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeviceGroupV1Read(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: UUID = Field(validation_alias="public_id")
+    name: str
+    description: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class DeviceV1Create(BaseModel):
-    site_id: int
+    site_id: UUID
     name: str = Field(min_length=1, max_length=120)
     ip_address: IPvAnyAddress
     mac_address: str | None = None
@@ -29,6 +52,7 @@ class DeviceV1Create(BaseModel):
     credential_profile_id: int | None = None
     vendor: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=120)
+    os_family: OsFamily | None = None
     os_version: str | None = Field(default=None, max_length=64)
     parent_device_id: UUID | None = None
     active: bool = True
@@ -44,7 +68,7 @@ class DeviceV1Create(BaseModel):
 
 
 class DeviceV1Update(BaseModel):
-    site_id: int | None = None
+    site_id: UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=120)
     ip_address: IPvAnyAddress | None = None
     mac_address: str | None = None
@@ -54,6 +78,7 @@ class DeviceV1Update(BaseModel):
     credential_profile_id: int | None = None
     vendor: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=120)
+    os_family: OsFamily | None = None
     os_version: str | None = Field(default=None, max_length=64)
     parent_device_id: UUID | None = None
     active: bool | None = None
@@ -72,7 +97,7 @@ class DeviceV1Read(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    site_id: int
+    site_id: UUID
     name: str
     ip_address: str
     mac_address: str | None
@@ -82,6 +107,7 @@ class DeviceV1Read(BaseModel):
     credential_profile_id: int | None
     vendor: str | None
     model: str | None
+    os_family: OsFamily | None
     os_version: str | None
     parent_device_id: UUID | None
     active: bool
@@ -95,6 +121,8 @@ class DeviceV1Read(BaseModel):
     fan_speed_rpm: float | None
     fans_ok: bool | None
     power_supplies_ok: bool | None
+    power_supplies_total: int | None
+    power_supplies_failed: int | None
     uptime_seconds: int | None
     dhcp_lease_count: int | None
     arp_entry_count: int | None

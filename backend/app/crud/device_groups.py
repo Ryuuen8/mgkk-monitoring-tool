@@ -10,13 +10,26 @@ from app.schemas import DeviceGroupCreate, DeviceGroupUpdate
 
 
 async def list_groups(
-    session: AsyncSession, *, limit: int = 50, offset: int = 0
+    session: AsyncSession,
+    *,
+    q: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> tuple[list[DeviceGroup], int]:
+    filters = []
+    if q is not None and q.strip():
+        filters.append(
+            func.lower(DeviceGroup.name).like(f"%{q.strip().lower()}%")
+        )
     total = (
-        await session.scalar(select(func.count()).select_from(DeviceGroup)) or 0
+        await session.scalar(
+            select(func.count()).select_from(DeviceGroup).where(*filters)
+        )
+        or 0
     )
     rows = await session.scalars(
         select(DeviceGroup)
+        .where(*filters)
         .order_by(DeviceGroup.id)
         .limit(limit)
         .offset(offset)

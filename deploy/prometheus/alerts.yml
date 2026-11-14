@@ -1,0 +1,187 @@
+groups:
+  - name: mgkk-reachability
+    rules:
+      - alert: DeviceDown
+        expr: |
+          max by (device, site) (device_up == 0)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.device }} is unreachable"
+          description: "The configured device check has failed for more than 2 minutes."
+
+      - alert: HighLatency
+        expr: |
+          max by (device, site) (device_latency_ms > 150)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} has high latency"
+          description: "Average check round-trip time is above 150 ms for 5 minutes."
+
+      - alert: HighPacketLoss
+        expr: |
+          max by (device, site) (packet_loss_percent > 5)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} is losing packets"
+          description: "Packet loss is above 5% for 5 minutes."
+
+  - name: mgkk-interfaces
+    rules:
+      - alert: InterfaceDown
+        expr: |
+          max by (device, interface, site) (
+            interface_admin_status == 1 and interface_oper_status == 2
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} {{ $labels.interface }} is down"
+          description: "The interface is administratively up but operationally down."
+
+      - alert: RisingInterfaceErrors
+        expr: |
+          max by (device, interface, site) (
+            (increase(interface_in_errors_total[5m])
+              + increase(interface_out_errors_total[5m])) > 0
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} {{ $labels.interface }} is accumulating errors"
+          description: "Interface input/output errors increased during the last 5 minutes."
+
+      - alert: CRCFcsErrors
+        expr: |
+          max by (device, interface, site) (
+            increase(interface_crc_errors_total[5m]) > 0
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} {{ $labels.interface }} has CRC/FCS errors"
+          description: "Ethernet CRC/FCS errors increased during the last 5 minutes."
+
+  - name: mgkk-bandwidth
+    rules:
+      - alert: HighUtilization
+        expr: |
+          max by (device, interface, site) (
+            interface_in_utilization_percent > 80
+            or interface_out_utilization_percent > 80
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} {{ $labels.interface }} is saturated"
+          description: "Interface utilization is above 80% for 10 minutes."
+
+      - alert: TrafficDrop
+        expr: |
+          max by (device, interface, site) (
+            (rate(interface_in_bytes_total[5m]) + rate(interface_out_bytes_total[5m]))
+            < 0.05 * (
+              rate(interface_in_bytes_total[1h] offset 5m)
+              + rate(interface_out_bytes_total[1h] offset 5m)
+            )
+            and on (device, interface, site)
+            (rate(interface_in_bytes_total[1h] offset 5m)
+              + rate(interface_out_bytes_total[1h] offset 5m)) > 125000
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} {{ $labels.interface }} traffic collapsed"
+          description: "A previously busy uplink is carrying less than 5% of its recent traffic."
+
+  - name: mgkk-health
+    rules:
+      - alert: HighCpu
+        expr: |
+          max by (device, site) (device_cpu_usage_percent > 85)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} CPU is high"
+          description: "CPU utilization is above 85% for 10 minutes."
+
+      - alert: HighMemory
+        expr: |
+          max by (device, site) (
+            (device_memory_usage_bytes / device_memory_total_bytes * 100 > 90)
+            and on (device, site) (device_memory_total_bytes > 0)
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} memory is high"
+          description: "Memory utilization is above 90% for 10 minutes."
+
+      - alert: HighTemperature
+        expr: |
+          max by (device, site) (device_temperature_celsius > 70)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.device }} is overheating"
+          description: "Temperature is above 70 C for 5 minutes."
+
+      - alert: FanFailure
+        expr: |
+          max by (device, site) (device_fans_ok == 0)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.device }} has a fan failure"
+          description: "At least one reported fan is not in a normal state."
+
+      - alert: PowerSupplyFailure
+        expr: |
+          max by (device, site) (device_power_supplies_ok == 0)
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.device }} has a power-supply failure"
+          description: "At least one reported power supply is not in a normal state."
+
+      - alert: PSULostRedundancy
+        expr: |
+          max by (device, site) (
+            (device_power_supplies_failed > 0)
+            and on (device, site) (device_power_supplies_total >= 2)
+          )
+          * on (device) group_left (device_id, parent_device, parent_device_id) device_parent_info
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.device }} lost power-supply redundancy"
+          description: "A multi-supply device has a failed supply."

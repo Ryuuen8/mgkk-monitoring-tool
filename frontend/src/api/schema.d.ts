@@ -4,43 +4,6 @@
  */
 
 export interface paths {
-    "/api/v1/sites": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Sites */
-        get: operations["list_sites_api_v1_sites_get"];
-        put?: never;
-        /** Create Site */
-        post: operations["create_site_api_v1_sites_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/sites/{site_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Site */
-        get: operations["get_site_api_v1_sites__site_id__get"];
-        put?: never;
-        post?: never;
-        /** Delete Site */
-        delete: operations["delete_site_api_v1_sites__site_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Site */
-        patch: operations["update_site_api_v1_sites__site_id__patch"];
-        trace?: never;
-    };
     "/api/sites": {
         parameters: {
             query?: never;
@@ -76,6 +39,43 @@ export interface paths {
         head?: never;
         /** Update Site */
         patch: operations["update_site_api_sites__site_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sites */
+        get: operations["list_sites_api_v1_sites_get"];
+        put?: never;
+        /** Create Site */
+        post: operations["create_site_api_v1_sites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Site */
+        get: operations["get_site_api_v1_sites__site_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Site */
+        delete: operations["delete_site_api_v1_sites__site_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Site */
+        patch: operations["update_site_api_v1_sites__site_id__patch"];
         trace?: never;
     };
     "/api/v1/groups": {
@@ -142,6 +142,23 @@ export interface paths {
         };
         /** List Device Status */
         get: operations["list_device_status_api_v1_devices_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Device Status */
+        get: operations["get_device_status_api_v1_devices__device_id__status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -263,6 +280,145 @@ export interface paths {
         };
         /** Get Device Metrics */
         get: operations["get_device_metrics_api_v1_devices__device_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Alertmanager Webhook */
+        post: operations["alertmanager_webhook_api_v1_alerts_webhook_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alerts */
+        get: operations["list_alerts_api_v1_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{alert_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge Alert */
+        post: operations["acknowledge_alert_api_v1_alerts__alert_id__ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Maintenance Windows */
+        get: operations["list_maintenance_windows_api_v1_maintenance_windows_get"];
+        put?: never;
+        /** Create Maintenance Window */
+        post: operations["create_maintenance_window_api_v1_maintenance_windows_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance-windows/{window_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Maintenance Window */
+        delete: operations["delete_maintenance_window_api_v1_maintenance_windows__window_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Maintenance Window */
+        patch: operations["update_maintenance_window_api_v1_maintenance_windows__window_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/silences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Silences */
+        get: operations["get_silences_api_v1_silences_get"];
+        put?: never;
+        /** Create Silence */
+        post: operations["create_silence_api_v1_silences_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/silences/{silence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Silence */
+        delete: operations["delete_silence_api_v1_silences__silence_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/syslog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Syslog Events */
+        get: operations["list_syslog_events_api_v1_syslog_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -401,6 +557,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/devices/fingerprint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fingerprint Device
+         * @description Probe a host and suggest a device type from its open ports.
+         */
+        get: operations["fingerprint_device_api_devices_fingerprint_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/devices/{device_id}/interfaces": {
         parameters: {
             query?: never;
@@ -530,6 +706,105 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlertAcknowledge */
+        AlertAcknowledge: {
+            /** Acknowledged By */
+            acknowledged_by?: string | null;
+        };
+        /** AlertEventRead */
+        AlertEventRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Alertname */
+            alertname: string;
+            /** Device Name */
+            device_name: string | null;
+            /** Site */
+            site: string | null;
+            /** Severity */
+            severity: string;
+            /** Status */
+            status: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /** Ends At */
+            ends_at: string | null;
+            /** Summary */
+            summary: string | null;
+            /** Description */
+            description: string | null;
+            /** Labels */
+            labels: {
+                [key: string]: unknown;
+            };
+            /** Annotations */
+            annotations: {
+                [key: string]: unknown;
+            };
+            /** Acknowledged At */
+            acknowledged_at: string | null;
+            /** Acknowledged By */
+            acknowledged_by: string | null;
+            /** Suppressed */
+            suppressed: boolean;
+            /**
+             * Last Received At
+             * Format: date-time
+             */
+            last_received_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AlertmanagerAlert */
+        AlertmanagerAlert: {
+            /** Status */
+            status: string;
+            /** Labels */
+            labels?: {
+                [key: string]: string;
+            };
+            /** Annotations */
+            annotations?: {
+                [key: string]: string;
+            };
+            /** Startsat */
+            startsAt?: string | null;
+            /** Endsat */
+            endsAt?: string | null;
+            /** Fingerprint */
+            fingerprint?: string | null;
+            /** Generatorurl */
+            generatorURL?: string | null;
+        };
+        /** AlertmanagerWebhook */
+        AlertmanagerWebhook: {
+            /** Version */
+            version?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Receiver */
+            receiver?: string | null;
+            /** Groupkey */
+            groupKey?: string | null;
+            /** Alerts */
+            alerts?: components["schemas"]["AlertmanagerAlert"][];
+        };
         /**
          * CollectorType
          * @enum {string}
@@ -655,6 +930,7 @@ export interface components {
             vendor?: string | null;
             /** Model */
             model?: string | null;
+            os_family?: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version?: string | null;
             /** Serial Number */
@@ -720,6 +996,7 @@ export interface components {
             vendor?: string | null;
             /** Model */
             model?: string | null;
+            os_family?: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version?: string | null;
             /** Serial Number */
@@ -816,6 +1093,28 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** DeviceGroupV1Read */
+        DeviceGroupV1Read: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** DeviceMetricSeries */
         DeviceMetricSeries: {
             /**
@@ -887,6 +1186,7 @@ export interface components {
             vendor?: string | null;
             /** Model */
             model?: string | null;
+            os_family?: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version?: string | null;
             /** Serial Number */
@@ -1001,6 +1301,7 @@ export interface components {
             vendor?: string | null;
             /** Model */
             model?: string | null;
+            os_family?: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version?: string | null;
             /** Serial Number */
@@ -1022,8 +1323,11 @@ export interface components {
         };
         /** DeviceV1Create */
         DeviceV1Create: {
-            /** Site Id */
-            site_id: number;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
             /** Name */
             name: string;
             /**
@@ -1049,6 +1353,7 @@ export interface components {
             vendor?: string | null;
             /** Model */
             model?: string | null;
+            os_family?: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version?: string | null;
             /** Parent Device Id */
@@ -1066,8 +1371,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Site Id */
-            site_id: number;
+            /**
+             * Site Id
+             * Format: uuid
+             */
+            site_id: string;
             /** Name */
             name: string;
             /** Ip Address */
@@ -1087,6 +1395,7 @@ export interface components {
             vendor: string | null;
             /** Model */
             model: string | null;
+            os_family: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version: string | null;
             /** Parent Device Id */
@@ -1113,6 +1422,10 @@ export interface components {
             fans_ok: boolean | null;
             /** Power Supplies Ok */
             power_supplies_ok: boolean | null;
+            /** Power Supplies Total */
+            power_supplies_total: number | null;
+            /** Power Supplies Failed */
+            power_supplies_failed: number | null;
             /** Uptime Seconds */
             uptime_seconds: number | null;
             /** Dhcp Lease Count */
@@ -1151,7 +1464,7 @@ export interface components {
         /** DeviceV1Update */
         DeviceV1Update: {
             /** Site Id */
-            site_id?: number | null;
+            site_id?: string | null;
             /** Name */
             name?: string | null;
             /** Ip Address */
@@ -1168,6 +1481,7 @@ export interface components {
             vendor?: string | null;
             /** Model */
             model?: string | null;
+            os_family?: components["schemas"]["OsFamily"] | null;
             /** Os Version */
             os_version?: string | null;
             /** Parent Device Id */
@@ -1230,6 +1544,99 @@ export interface components {
         LinkSpeedOverrideUpdate: {
             /** Link Speed Override Mbps */
             link_speed_override_mbps?: number | null;
+        };
+        /** MaintenanceWindowCreate */
+        MaintenanceWindowCreate: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Scope Type
+             * @enum {string}
+             */
+            scope_type: "device" | "group" | "site";
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /**
+             * Suppress Notifications
+             * @default true
+             */
+            suppress_notifications: boolean;
+            /** Created By */
+            created_by?: string | null;
+        };
+        /** MaintenanceWindowRead */
+        MaintenanceWindowRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
+            /** Scope Type */
+            scope_type: string;
+            /** Device Id */
+            device_id: string | null;
+            /** Group Id */
+            group_id: string | null;
+            /** Site Id */
+            site_id: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Suppress Notifications */
+            suppress_notifications: boolean;
+            /** Silence Ids */
+            silence_ids: string[];
+            /** Created By */
+            created_by: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** MaintenanceWindowUpdate */
+        MaintenanceWindowUpdate: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Starts At */
+            starts_at?: string | null;
+            /** Ends At */
+            ends_at?: string | null;
+            /** Suppress Notifications */
+            suppress_notifications?: boolean | null;
         };
         /**
          * MetricPoint
@@ -1313,10 +1720,37 @@ export interface components {
             /** Last Polled At */
             last_polled_at: string | null;
         };
+        /**
+         * OsFamily
+         * @enum {string}
+         */
+        OsFamily: "routeros" | "ios" | "iosxe" | "nxos" | "linux";
+        /** Page[AlertEventRead] */
+        Page_AlertEventRead_: {
+            /** Items */
+            items: components["schemas"]["AlertEventRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
         /** Page[DeviceGroupRead] */
         Page_DeviceGroupRead_: {
             /** Items */
             items: components["schemas"]["DeviceGroupRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** Page[DeviceGroupV1Read] */
+        Page_DeviceGroupV1Read_: {
+            /** Items */
+            items: components["schemas"]["DeviceGroupV1Read"][];
             /** Total */
             total: number;
             /** Limit */
@@ -1346,6 +1780,17 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /** Page[MaintenanceWindowRead] */
+        Page_MaintenanceWindowRead_: {
+            /** Items */
+            items: components["schemas"]["MaintenanceWindowRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
         /** Page[SiteRead] */
         Page_SiteRead_: {
             /** Items */
@@ -1356,6 +1801,59 @@ export interface components {
             limit: number;
             /** Offset */
             offset: number;
+        };
+        /** Page[SiteV1Read] */
+        Page_SiteV1Read_: {
+            /** Items */
+            items: components["schemas"]["SiteV1Read"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** Page[SyslogEventRead] */
+        Page_SyslogEventRead_: {
+            /** Items */
+            items: components["schemas"]["SyslogEventRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** SilenceCreate */
+        SilenceCreate: {
+            /** Matchers */
+            matchers: components["schemas"]["SilenceMatcher"][];
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Created By */
+            created_by: string;
+            /** Comment */
+            comment: string;
+        };
+        /** SilenceMatcher */
+        SilenceMatcher: {
+            /** Name */
+            name: string;
+            /** Value */
+            value: string;
+            /**
+             * Isregex
+             * @default false
+             */
+            isRegex: boolean;
         };
         /** SiteCreate */
         SiteCreate: {
@@ -1429,6 +1927,34 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /** SiteV1Read */
+        SiteV1Read: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Address */
+            address: string | null;
+            /** Timezone */
+            timezone: string;
+            /** Notes */
+            notes: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * SnmpAuthProtocol
          * @enum {string}
@@ -1439,6 +1965,40 @@ export interface components {
          * @enum {string}
          */
         SnmpPrivacyProtocol: "none" | "aes128";
+        /** SyslogEventRead */
+        SyslogEventRead: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Device Id */
+            device_id: number | null;
+            /** Source Ip */
+            source_ip: string;
+            /** Facility */
+            facility: number;
+            /** Severity */
+            severity: number;
+            /** Hostname */
+            hostname: string | null;
+            /** App Name */
+            app_name: string | null;
+            /** Event Type */
+            event_type: string;
+            /** Message */
+            message: string;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1452,6 +2012,13 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WebhookResult */
+        WebhookResult: {
+            /** Processed */
+            processed: number;
+            /** Suppressed */
+            suppressed: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -1461,169 +2028,10 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_sites_api_v1_sites_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Page_SiteRead_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_site_api_v1_sites_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SiteCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_site_api_v1_sites__site_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                site_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_site_api_v1_sites__site_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                site_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_site_api_v1_sites__site_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                site_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SiteUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_sites_api_sites_get: {
         parameters: {
             query?: {
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -1781,9 +2189,10 @@ export interface operations {
             };
         };
     };
-    list_groups_api_v1_groups_get: {
+    list_sites_api_v1_sites_get: {
         parameters: {
             query?: {
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -1799,7 +2208,168 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Page_DeviceGroupRead_"];
+                    "application/json": components["schemas"]["Page_SiteV1Read_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_site_api_v1_sites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteV1Read"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_api_v1_sites__site_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteV1Read"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_site_api_v1_sites__site_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_site_api_v1_sites__site_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteV1Read"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_groups_api_v1_groups_get: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DeviceGroupV1Read_"];
                 };
             };
             /** @description Validation Error */
@@ -1832,7 +2402,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeviceGroupRead"];
+                    "application/json": components["schemas"]["DeviceGroupV1Read"];
                 };
             };
             /** @description Validation Error */
@@ -1851,7 +2421,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                group_id: number;
+                group_id: string;
             };
             cookie?: never;
         };
@@ -1863,7 +2433,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeviceGroupRead"];
+                    "application/json": components["schemas"]["DeviceGroupV1Read"];
                 };
             };
             /** @description Validation Error */
@@ -1882,7 +2452,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                group_id: number;
+                group_id: string;
             };
             cookie?: never;
         };
@@ -1911,7 +2481,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                group_id: number;
+                group_id: string;
             };
             cookie?: never;
         };
@@ -1927,7 +2497,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeviceGroupRead"];
+                    "application/json": components["schemas"]["DeviceGroupV1Read"];
                 };
             };
             /** @description Validation Error */
@@ -1944,10 +2514,14 @@ export interface operations {
     list_devices_api_v1_devices_get: {
         parameters: {
             query?: {
-                site_id?: number | null;
+                site_id?: string | null;
                 collector?: string | null;
                 active?: boolean | null;
                 vendor?: string | null;
+                os_family?: components["schemas"]["OsFamily"] | null;
+                check_type?: components["schemas"]["DeviceCheckType"] | null;
+                group_id?: string | null;
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -2026,6 +2600,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceV1Status"][];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_device_status_api_v1_devices__device_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceV1Status"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Bad Gateway */
@@ -2362,9 +2976,366 @@ export interface operations {
             };
         };
     };
+    alertmanager_webhook_api_v1_alerts_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertmanagerWebhook"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_alerts_api_v1_alerts_get: {
+        parameters: {
+            query?: {
+                status?: string | null;
+                severity?: string | null;
+                site?: string | null;
+                device_id?: string | null;
+                acknowledged?: boolean | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_AlertEventRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_alert_api_v1_alerts__alert_id__ack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alert_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AlertAcknowledge"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_maintenance_windows_api_v1_maintenance_windows_get: {
+        parameters: {
+            query?: {
+                active_only?: boolean;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_MaintenanceWindowRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_maintenance_window_api_v1_maintenance_windows_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindowRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_maintenance_window_api_v1_maintenance_windows__window_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                window_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_maintenance_window_api_v1_maintenance_windows__window_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                window_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWindowUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindowRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_silences_api_v1_silences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+        };
+    };
+    create_silence_api_v1_silences_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SilenceCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_silence_api_v1_silences__silence_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                silence_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_syslog_events_api_v1_syslog_get: {
+        parameters: {
+            query?: {
+                device_id?: string | null;
+                event_type?: string | null;
+                min_severity?: number;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SyslogEventRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_groups_api_device_groups_get: {
         parameters: {
             query?: {
+                q?: string | null;
                 limit?: number;
                 offset?: number;
             };
@@ -2752,6 +3723,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceStatusList"];
+                };
+            };
+        };
+    };
+    fingerprint_device_api_devices_fingerprint_get: {
+        parameters: {
+            query: {
+                ip: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
