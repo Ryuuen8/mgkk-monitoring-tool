@@ -45,6 +45,10 @@ function profileTypeLabel(type: CredentialType): string {
       return "SNMP v3";
     case "routeros_api":
       return "RouterOS API";
+    case "cisco_restconf":
+      return "Cisco RESTCONF";
+    case "cisco_ssh":
+      return "Cisco SSH";
   }
 }
 
@@ -107,7 +111,12 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
     setForm((current) => ({
       ...current,
       credential_type: type,
-      port: type === "routeros_api" ? "443" : "161",
+      port:
+        type === "routeros_api" ||
+        type === "cisco_restconf" ||
+        type === "cisco_ssh"
+          ? "443"
+          : "161",
     }));
   };
 
@@ -281,6 +290,8 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                   <option value="snmp_v2c">SNMP v2c</option>
                   <option value="snmp_v3">SNMP v3</option>
                   <option value="routeros_api">RouterOS API</option>
+                  <option value="cisco_restconf">Cisco RESTCONF</option>
+                  <option value="cisco_ssh">Cisco SSH</option>
                 </select>
               </label>
               {form.credential_type !== "snmp_v2c" && (
@@ -410,7 +421,8 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                 />
               </label>
             </div>
-            {form.credential_type === "routeros_api" && (
+            {form.credential_type !== "snmp_v2c" &&
+              form.credential_type !== "snmp_v3" && (
               <label className="checkbox">
                 <input
                   type="checkbox"
@@ -494,7 +506,9 @@ function CredentialProfiles({ onDevices }: CredentialProfilesProps) {
                   <td>{profile.username ?? "Community string"}</td>
                   <td className="mono">{profile.port}</td>
                   <td>
-                    {profile.credential_type === "routeros_api"
+                    {profile.credential_type === "routeros_api" ||
+                    profile.credential_type === "cisco_restconf" ||
+                    profile.credential_type === "cisco_ssh"
                       ? profile.verify_tls
                         ? "HTTPS · verified"
                         : "HTTPS · unverified"

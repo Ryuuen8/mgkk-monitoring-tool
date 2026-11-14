@@ -21,6 +21,12 @@ export type DeviceUpdate = components["schemas"]["DeviceUpdate"];
 export type Site = components["schemas"]["SiteRead"];
 export type DeviceGroup = components["schemas"]["DeviceGroupRead"];
 export type MetricPoint = components["schemas"]["MetricPoint"];
+export type DeviceV1 = components["schemas"]["DeviceV1Read"];
+export type DeviceV1Create = components["schemas"]["DeviceV1Create"];
+export type DeviceV1Update = components["schemas"]["DeviceV1Update"];
+export type DeviceV1Status = components["schemas"]["DeviceV1Status"];
+export type DeviceMetricSeries = components["schemas"]["DeviceMetricSeries"];
+export type CollectorV1 = components["schemas"]["DeviceV1Read"]["collector"];
 export type InterfaceMetrics = components["schemas"]["InterfaceMetrics"];
 export type NetworkInterface = components["schemas"]["NetworkInterfaceRead"];
 
@@ -37,10 +43,12 @@ export const CHECK_TYPES: CheckType[] = [
   "ping_only",
   "snmp",
   "routeros_api",
+  "restconf",
 ];
 
 /** Turn a FastAPI error body (or anything else) into a readable message. */
 export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
   if (typeof error === "object" && error !== null && "detail" in error) {
     const detail = (error as { detail?: unknown }).detail;
     if (typeof detail === "string") return detail;
@@ -64,6 +72,19 @@ export function formatDeviceType(type: DeviceType): string {
     : type.charAt(0).toUpperCase() + type.slice(1);
 }
 
+export function formatCollector(type: string): string {
+  switch (type) {
+    case "generic_snmp":
+      return "Generic SNMP";
+    case "mikrotik":
+      return "MikroTik";
+    case "cisco":
+      return "Cisco";
+    default:
+      return type;
+  }
+}
+
 export function formatCheckType(type: CheckType | undefined): string {
   switch (type) {
     case "ping_only":
@@ -72,6 +93,8 @@ export function formatCheckType(type: CheckType | undefined): string {
       return "SNMP";
     case "routeros_api":
       return "RouterOS API";
+    case "restconf":
+      return "RESTCONF";
     default:
       return "Ping only";
   }

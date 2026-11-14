@@ -4,6 +4,43 @@
  */
 
 export interface paths {
+    "/api/v1/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Sites */
+        get: operations["list_sites_api_v1_sites_get"];
+        put?: never;
+        /** Create Site */
+        post: operations["create_site_api_v1_sites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Site */
+        get: operations["get_site_api_v1_sites__site_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Site */
+        delete: operations["delete_site_api_v1_sites__site_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Site */
+        patch: operations["update_site_api_v1_sites__site_id__patch"];
+        trace?: never;
+    };
     "/api/sites": {
         parameters: {
             query?: never;
@@ -39,6 +76,199 @@ export interface paths {
         head?: never;
         /** Update Site */
         patch: operations["update_site_api_sites__site_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Groups */
+        get: operations["list_groups_api_v1_groups_get"];
+        put?: never;
+        /** Create Group */
+        post: operations["create_group_api_v1_groups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Group */
+        get: operations["get_group_api_v1_groups__group_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Group */
+        delete: operations["delete_group_api_v1_groups__group_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Group */
+        patch: operations["update_group_api_v1_groups__group_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Devices */
+        get: operations["list_devices_api_v1_devices_get"];
+        put?: never;
+        /** Create Device */
+        post: operations["create_device_api_v1_devices_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Device Status */
+        get: operations["list_device_status_api_v1_devices_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Device */
+        get: operations["get_device_api_v1_devices__device_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Device */
+        delete: operations["delete_device_api_v1_devices__device_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Device */
+        patch: operations["update_device_api_v1_devices__device_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/interfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Device Interfaces */
+        get: operations["list_device_interfaces_api_v1_devices__device_id__interfaces_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/neighbors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Device Neighbors */
+        get: operations["list_device_neighbors_api_v1_devices__device_id__neighbors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/interfaces/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Device Interfaces Metrics */
+        get: operations["get_device_interfaces_metrics_api_v1_devices__device_id__interfaces_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/interfaces/{interface_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Device Interface */
+        patch: operations["update_device_interface_api_v1_devices__device_id__interfaces__interface_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/interfaces/{interface_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Device Interface Metrics */
+        get: operations["get_device_interface_metrics_api_v1_devices__device_id__interfaces__interface_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/devices/{device_id}/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Device Metrics */
+        get: operations["get_device_metrics_api_v1_devices__device_id__metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/device-groups": {
@@ -304,7 +534,7 @@ export interface components {
          * CollectorType
          * @enum {string}
          */
-        CollectorType: "generic" | "mikrotik";
+        CollectorType: "generic_snmp" | "mikrotik" | "cisco";
         /** CredentialProfileCreate */
         CredentialProfileCreate: {
             /** Name */
@@ -392,12 +622,12 @@ export interface components {
          * CredentialType
          * @enum {string}
          */
-        CredentialType: "snmp_v2c" | "snmp_v3" | "routeros_api";
+        CredentialType: "snmp_v2c" | "snmp_v3" | "routeros_api" | "cisco_restconf" | "cisco_ssh";
         /**
          * DeviceCheckType
          * @enum {string}
          */
-        DeviceCheckType: "ping_only" | "snmp" | "routeros_api";
+        DeviceCheckType: "ping_only" | "snmp" | "routeros_api" | "restconf";
         /** DeviceCreate */
         DeviceCreate: {
             /** Site Id */
@@ -417,7 +647,7 @@ export interface components {
             device_type: components["schemas"]["DeviceType"];
             /** @default ping_only */
             check_type: components["schemas"]["DeviceCheckType"];
-            /** @default generic */
+            /** @default generic_snmp */
             collector: components["schemas"]["CollectorType"];
             /** Credential Profile Id */
             credential_profile_id?: number | null;
@@ -482,7 +712,7 @@ export interface components {
             device_type: components["schemas"]["DeviceType"];
             /** @default ping_only */
             check_type: components["schemas"]["DeviceCheckType"];
-            /** @default generic */
+            /** @default generic_snmp */
             collector: components["schemas"]["CollectorType"];
             /** Credential Profile Id */
             credential_profile_id?: number | null;
@@ -586,6 +816,18 @@ export interface components {
             /** Description */
             description?: string | null;
         };
+        /** DeviceMetricSeries */
+        DeviceMetricSeries: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Latency */
+            latency: components["schemas"]["MetricPoint"][];
+            /** Packet Loss Percent */
+            packet_loss_percent: components["schemas"]["MetricPoint"][];
+        };
         /** DeviceMetrics */
         DeviceMetrics: {
             /** Device Id */
@@ -637,7 +879,7 @@ export interface components {
             device_type: components["schemas"]["DeviceType"];
             /** @default ping_only */
             check_type: components["schemas"]["DeviceCheckType"];
-            /** @default generic */
+            /** @default generic_snmp */
             collector: components["schemas"]["CollectorType"];
             /** Credential Profile Id */
             credential_profile_id?: number | null;
@@ -778,6 +1020,166 @@ export interface components {
             /** Group Ids */
             group_ids?: number[] | null;
         };
+        /** DeviceV1Create */
+        DeviceV1Create: {
+            /** Site Id */
+            site_id: number;
+            /** Name */
+            name: string;
+            /**
+             * Ip Address
+             * Format: ipvanyaddress
+             */
+            ip_address: string;
+            /** Mac Address */
+            mac_address?: string | null;
+            /**
+             * Collector
+             * @default generic_snmp
+             * @enum {string}
+             */
+            collector: "generic_snmp" | "mikrotik" | "cisco";
+            /** @default other */
+            device_type: components["schemas"]["DeviceType"];
+            /** @default ping_only */
+            check_type: components["schemas"]["DeviceCheckType"];
+            /** Credential Profile Id */
+            credential_profile_id?: number | null;
+            /** Vendor */
+            vendor?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Os Version */
+            os_version?: string | null;
+            /** Parent Device Id */
+            parent_device_id?: string | null;
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+        };
+        /** DeviceV1Read */
+        DeviceV1Read: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Site Id */
+            site_id: number;
+            /** Name */
+            name: string;
+            /** Ip Address */
+            ip_address: string;
+            /** Mac Address */
+            mac_address: string | null;
+            /**
+             * Collector
+             * @enum {string}
+             */
+            collector: "generic_snmp" | "mikrotik" | "cisco";
+            device_type: components["schemas"]["DeviceType"];
+            check_type: components["schemas"]["DeviceCheckType"];
+            /** Credential Profile Id */
+            credential_profile_id: number | null;
+            /** Vendor */
+            vendor: string | null;
+            /** Model */
+            model: string | null;
+            /** Os Version */
+            os_version: string | null;
+            /** Parent Device Id */
+            parent_device_id: string | null;
+            /** Active */
+            active: boolean;
+            /** Cpu Usage Percent */
+            cpu_usage_percent: number | null;
+            /** Memory Total Bytes */
+            memory_total_bytes: number | null;
+            /** Memory Used Bytes */
+            memory_used_bytes: number | null;
+            /** Disk Total Bytes */
+            disk_total_bytes: number | null;
+            /** Disk Used Bytes */
+            disk_used_bytes: number | null;
+            /** Temperature Celsius */
+            temperature_celsius: number | null;
+            /** Voltage Volts */
+            voltage_volts: number | null;
+            /** Fan Speed Rpm */
+            fan_speed_rpm: number | null;
+            /** Fans Ok */
+            fans_ok: boolean | null;
+            /** Power Supplies Ok */
+            power_supplies_ok: boolean | null;
+            /** Uptime Seconds */
+            uptime_seconds: number | null;
+            /** Dhcp Lease Count */
+            dhcp_lease_count: number | null;
+            /** Arp Entry Count */
+            arp_entry_count: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** DeviceV1Status */
+        DeviceV1Status: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Name */
+            name: string;
+            /** Up */
+            up: boolean | null;
+            /** Latency Ms */
+            latency_ms: number | null;
+            /** Packet Loss Percent */
+            packet_loss_percent: number | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+        };
+        /** DeviceV1Update */
+        DeviceV1Update: {
+            /** Site Id */
+            site_id?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Ip Address */
+            ip_address?: string | null;
+            /** Mac Address */
+            mac_address?: string | null;
+            /** Collector */
+            collector?: ("generic_snmp" | "mikrotik" | "cisco") | null;
+            device_type?: components["schemas"]["DeviceType"] | null;
+            check_type?: components["schemas"]["DeviceCheckType"] | null;
+            /** Credential Profile Id */
+            credential_profile_id?: number | null;
+            /** Vendor */
+            vendor?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Os Version */
+            os_version?: string | null;
+            /** Parent Device Id */
+            parent_device_id?: string | null;
+            /** Active */
+            active?: boolean | null;
+        };
+        /** ErrorResponse */
+        ErrorResponse: {
+            /** Detail */
+            detail: string;
+        };
         /**
          * GroupMembersUpdate
          * @description Body for adding or removing devices from a group.
@@ -809,10 +1211,16 @@ export interface components {
             in_errors_per_second: components["schemas"]["MetricPoint"][];
             /** Out Errors Per Second */
             out_errors_per_second: components["schemas"]["MetricPoint"][];
+            /** Crc Errors Per Second */
+            crc_errors_per_second: components["schemas"]["MetricPoint"][];
             /** In Discards Per Second */
             in_discards_per_second: components["schemas"]["MetricPoint"][];
             /** Out Discards Per Second */
             out_discards_per_second: components["schemas"]["MetricPoint"][];
+            /** In Utilization Percent */
+            in_utilization_percent: components["schemas"]["MetricPoint"][];
+            /** Out Utilization Percent */
+            out_utilization_percent: components["schemas"]["MetricPoint"][];
             /** In Utilization */
             in_utilization: components["schemas"]["MetricPoint"][];
             /** Out Utilization */
@@ -832,6 +1240,35 @@ export interface components {
             t: number;
             /** Value */
             value: number;
+        };
+        /** NeighborV1Read */
+        NeighborV1Read: {
+            /** Id */
+            id: number;
+            /** Protocol */
+            protocol: string;
+            /** Local Interface */
+            local_interface: string;
+            /** Remote Device */
+            remote_device: string | null;
+            /** Remote Interface */
+            remote_interface: string | null;
+            /** Remote Platform */
+            remote_platform: string | null;
+            /** Remote Address */
+            remote_address: string | null;
+            /** Capabilities */
+            capabilities: string | null;
+            /**
+             * First Seen At
+             * Format: date-time
+             */
+            first_seen_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
         };
         /** NetworkInterfaceRead */
         NetworkInterfaceRead: {
@@ -863,6 +1300,16 @@ export interface components {
             link_speed_mbps: number | null;
             /** Link Speed Override Mbps */
             link_speed_override_mbps: number | null;
+            /** Last In Errors */
+            last_in_errors?: number | null;
+            /** Last Out Errors */
+            last_out_errors?: number | null;
+            /** Last Crc Errors */
+            last_crc_errors?: number | null;
+            /** Last In Discards */
+            last_in_discards?: number | null;
+            /** Last Out Discards */
+            last_out_discards?: number | null;
             /** Last Polled At */
             last_polled_at: string | null;
         };
@@ -881,6 +1328,17 @@ export interface components {
         Page_DeviceRead_: {
             /** Items */
             items: components["schemas"]["DeviceRead"][];
+            /** Total */
+            total: number;
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+        };
+        /** Page[DeviceV1Read] */
+        Page_DeviceV1Read_: {
+            /** Items */
+            items: components["schemas"]["DeviceV1Read"][];
             /** Total */
             total: number;
             /** Limit */
@@ -1003,6 +1461,166 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_sites_api_v1_sites_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_SiteRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_site_api_v1_sites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_site_api_v1_sites__site_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_site_api_v1_sites__site_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_site_api_v1_sites__site_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                site_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_sites_api_sites_get: {
         parameters: {
             query?: {
@@ -1159,6 +1777,587 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_groups_api_v1_groups_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DeviceGroupRead_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_group_api_v1_groups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceGroupCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGroupRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_group_api_v1_groups__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGroupRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_group_api_v1_groups__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_group_api_v1_groups__group_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceGroupUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGroupRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_devices_api_v1_devices_get: {
+        parameters: {
+            query?: {
+                site_id?: number | null;
+                collector?: string | null;
+                active?: boolean | null;
+                vendor?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_DeviceV1Read_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_device_api_v1_devices_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceV1Create"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceV1Read"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_device_status_api_v1_devices_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceV1Status"][];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_device_api_v1_devices__device_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceV1Read"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_device_api_v1_devices__device_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_device_api_v1_devices__device_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceV1Update"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceV1Read"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_device_interfaces_api_v1_devices__device_id__interfaces_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkInterfaceRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_device_neighbors_api_v1_devices__device_id__neighbors_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NeighborV1Read"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_device_interfaces_metrics_api_v1_devices__device_id__interfaces_metrics_get: {
+        parameters: {
+            query?: {
+                range_hours?: number;
+                step_seconds?: number;
+            };
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterfaceMetrics"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_device_interface_api_v1_devices__device_id__interfaces__interface_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                device_id: string;
+                interface_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkSpeedOverrideUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkInterfaceRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_device_interface_metrics_api_v1_devices__device_id__interfaces__interface_id__metrics_get: {
+        parameters: {
+            query?: {
+                range_hours?: number;
+                step_seconds?: number;
+            };
+            header?: never;
+            path: {
+                device_id: string;
+                interface_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterfaceMetrics"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_device_metrics_api_v1_devices__device_id__metrics_get: {
+        parameters: {
+            query?: {
+                range_minutes?: number;
+                step_seconds?: number;
+            };
+            header?: never;
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceMetricSeries"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

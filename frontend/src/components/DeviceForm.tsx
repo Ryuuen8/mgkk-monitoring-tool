@@ -53,7 +53,7 @@ const EMPTY_FORM: FormState = {
   os_version: "",
   serial_number: "",
   check_type: "ping_only",
-  collector: "generic",
+  collector: "generic_snmp",
   credential_profile_id: "",
   poll_interval_seconds: "60",
   is_active: true,
@@ -136,7 +136,7 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
           os_version: data.os_version ?? "",
           serial_number: data.serial_number ?? "",
           check_type: data.check_type ?? "ping_only",
-          collector: data.collector ?? "generic",
+          collector: data.collector ?? "generic_snmp",
           credential_profile_id:
             data.credential_profile_id == null
               ? ""
@@ -469,7 +469,7 @@ function DeviceForm({ deviceId, onSaved, onCancel }: DeviceFormProps) {
                   update("collector", event.target.value as CollectorType)
                 }
               >
-                <option value="generic">Generic SNMP</option>
+                <option value="generic_snmp">Generic SNMP</option>
                 <option value="mikrotik">MikroTik</option>
               </select>
             </label>

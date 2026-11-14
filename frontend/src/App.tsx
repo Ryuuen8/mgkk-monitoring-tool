@@ -1,17 +1,18 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import CredentialProfiles from "./components/CredentialProfiles";
-import DeviceDetailPage from "./components/DeviceDetail";
-import DeviceForm from "./components/DeviceForm";
-import DeviceList from "./components/DeviceList";
+import DeviceFormV1 from "./components/DeviceFormV1";
+import DeviceInventoryV1 from "./components/DeviceInventoryV1";
 import UiGuide from "./components/UiGuide";
+
+const DeviceDetailV1 = lazy(() => import("./components/DeviceDetailV1"));
 
 type Tab = "overview" | "devices" | "credentials" | "guide";
 
 type DeviceRoute =
   | { view: "list" }
   | { view: "add" }
-  | { view: "edit"; id: number }
-  | { view: "detail"; id: number };
+  | { view: "edit"; id: string }
+  | { view: "detail"; id: string };
 
 type ApiStatus = "checking" | "online" | "offline";
 
@@ -47,7 +48,7 @@ function App() {
     setRoute({ view: "list" });
   };
 
-  const handleSaved = (id: number) => {
+  const handleSaved = (id: string) => {
     setRefreshToken((token) => token + 1);
     setRoute({ view: "detail", id });
   };
@@ -165,7 +166,7 @@ function App() {
       {activeTab === "devices" && (
         <>
           {route.view === "list" && (
-            <DeviceList
+            <DeviceInventoryV1
               refreshToken={refreshToken}
               onAdd={() => setRoute({ view: "add" })}
               onOpen={(id) => setRoute({ view: "detail", id })}
@@ -174,14 +175,14 @@ function App() {
             />
           )}
           {route.view === "add" && (
-            <DeviceForm
+            <DeviceFormV1
               onSaved={handleSaved}
               onCancel={() => setRoute({ view: "list" })}
             />
           )}
 
           {route.view === "edit" && (
-            <DeviceForm
+            <DeviceFormV1
               deviceId={route.id}
               onSaved={handleSaved}
               onCancel={() => setRoute({ view: "detail", id: route.id })}
@@ -189,11 +190,15 @@ function App() {
           )}
 
           {route.view === "detail" && (
-            <DeviceDetailPage
-              deviceId={route.id}
-              onBack={() => setRoute({ view: "list" })}
-              onEdit={(id) => setRoute({ view: "edit", id })}
-            />
+            <Suspense
+              fallback={<section className="page-section muted">Loading chart…</section>}
+            >
+              <DeviceDetailV1
+                deviceId={route.id}
+                onBack={() => setRoute({ view: "list" })}
+                onEdit={(id) => setRoute({ view: "edit", id })}
+              />
+            </Suspense>
           )}
         </>
       )}
