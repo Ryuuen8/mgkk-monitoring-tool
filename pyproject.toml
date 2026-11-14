@@ -12,6 +12,7 @@ dependencies = [
     "fastapi[standard]>=0.115.0",
     "httpx>=0.28.1",
     "icmplib>=3.0.4",
+    "librouteros>=4.2.2",
     "mypy>=2.4.0",
     "netmiko>=4.8.0",
     "prometheus-client>=0.22.0",
@@ -42,3 +43,21 @@ package = false
 pythonpath = ["backend"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+plugins = ["pydantic.mypy"]
+mypy_path = "backend"
+exclude = ["^backend/alembic/versions/", "^tests/"]
+
+[[tool.mypy.overrides]]
+module = [
+    "pysnmp.*",
+    "librouteros.*",
+    "icmplib.*",
+    "netmiko.*",
+]
+ignore_missing_imports = true
+

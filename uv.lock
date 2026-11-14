@@ -1165,6 +1165,15 @@ wheels = [
 ]
 
 [[package]]
+name = "librouteros"
+version = "4.2.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/57/996d2fb2eee355c578c5fc3c40e16a1534f53c528ecabe23c6c3d4a1b881/librouteros-4.2.2.tar.gz", hash = "sha256:fb9336f233a458b25539267d99d644e80e1ee3b74eabc0c4aca4351b8e239267", size = 22652, upload-time = "2026-09-15T19:37:20.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/74/28237f173b8500c1a4ca01cc01f6486045aa6083d77c161796dafe816d29/librouteros-4.2.2-py3-none-any.whl", hash = "sha256:64a27ddc0c3ee793d58775aa58bfc6187327b7e5acfdaf615fb6ff0b3424ee5c", size = 25778, upload-time = "2026-09-15T19:37:19.141Z" },
+]
+
+[[package]]
 name = "librt"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1424,6 +1433,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "httpx" },
     { name = "icmplib" },
+    { name = "librouteros" },
     { name = "mypy" },
     { name = "netmiko" },
     { name = "prometheus-client" },
@@ -1457,6 +1467,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "icmplib", specifier = ">=3.0.4" },
+    { name = "librouteros", specifier = ">=4.2.2" },
     { name = "mypy", specifier = ">=2.4.0" },
     { name = "netmiko", specifier = ">=4.8.0" },
     { name = "prometheus-client", specifier = ">=0.22.0" },
